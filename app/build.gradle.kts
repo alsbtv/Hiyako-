@@ -94,4 +94,6 @@ dependencies {
     // Explicit Dependencies for Conflict Resolution
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.sqlite:sqlite:2.4.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jsoup:jsoup:1.17.2")
 }
