@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nombre_app">Hiyako </string>
+    <string name="bienvenida">تطبيقك جاهز. هذه الشاشة أنشأها Hefesto: اطلب من الوكيل أي شيء تريد إضافته.</string>
+    <string name="titulo_tarjeta">ابدأ من هنا</string>
+    <string name="texto_tarjeta">الشيفرة في app/src/main. الشاشة في res/layout/actividad_principal.xml؛ والسلوك في ActividadPrincipal.kt.</string>
+    <string name="boton">المسني</string>
+    <string name="sin_toques">لم تلمس الزر بعد.</string>
+    <plurals name="toques">
+        <item quantity="one">لمسة واحدة.</item>
+        <item quantity="other">%d لمسات.</item>
+    </plurals>
+</resources>
