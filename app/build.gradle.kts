@@ -47,6 +47,15 @@ android {
     }
 }
 
+configurations.all {
+    resolutionStrategy {
+        force("androidx.appcompat:appcompat:1.6.1")
+        force("androidx.appcompat:appcompat-resources:1.6.1")
+        force("androidx.sqlite:sqlite:2.4.0")
+        force("androidx.sqlite:sqlite-framework:2.4.0")
+    }
+}
+
 dependencies {
     // Jetpack Compose (Material 3 BOM)
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
@@ -81,4 +90,8 @@ dependencies {
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
+
+    // Explicit Dependencies for Conflict Resolution
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.sqlite:sqlite:2.4.0")
 }
