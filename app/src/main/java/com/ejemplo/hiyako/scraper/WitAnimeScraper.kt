@@ -18,7 +18,7 @@ class WitAnimeScraper @Inject constructor() {
     suspend fun getLatestAnime(): List<ScrapedAnime> = withContext(Dispatchers.IO) {
         // Using corsproxy.io for faster bypass
         val targetUrl = "https://api.jikan.moe/v4/top/anime"
-        val proxyUrl = "https://corsproxy.io/?${targetUrl}"
+        val proxyUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=" + targetUrl
         
         val request = Request.Builder().url(proxyUrl).build()
         val response = client.newCall(request).execute()
