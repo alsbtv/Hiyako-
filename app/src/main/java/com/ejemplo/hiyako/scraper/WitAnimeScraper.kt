@@ -2,11 +2,9 @@ package com.ejemplo.hiyako.scraper
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
+import org.jsoup.Jsoup
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -17,55 +15,29 @@ class WitAnimeScraper @Inject constructor() {
         .build()
 
     suspend fun getLatestAnime(): List<ScrapedAnime> = withContext(Dispatchers.IO) {
-        val query = """
-            query {
-              Page(page: 1, perPage: 20) {
-                media(type: ANIME, sort: POPULARITY_DESC) {
-                  id
-                  title { romaji english }
-                  coverImage { extraLarge large }
-                }
-              }
-            }
-        """.trimIndent()
-
-        val jsonBody = JSONObject().put("query", query).toString()
-        val mediaType = "application/json; charset=utf-8".toMediaType()
-        val requestBody = jsonBody.toRequestBody(mediaType)
-
-        val workerUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=https://graphql.anilist.co"
-        val request = Request.Builder().url(workerUrl).post(requestBody).build()
-
+        val targetUrl = "https://witanime.com/"
+        val proxyUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=" + targetUrl
+        val request = Request.Builder().url(proxyUrl).build()
         val response = client.newCall(request).execute()
-        val jsonString = response.body?.string() ?: ""
-        
-        if (!response.isSuccessful) {
-            throw Exception("HTTP ${response.code}: ${jsonString.take(50)}")
-        }
-        if (jsonString.isEmpty()) {
-            throw Exception("Received empty string from server")
-        }
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
 
-        try {
-            val jsonObject = JSONObject(jsonString)
-            if (!jsonObject.has("data")) {
-                 throw Exception("Missing 'data' key. Raw: ${jsonString.take(50)}")
-            }
-            val mediaArray = jsonObject.getJSONObject("data").getJSONObject("Page").getJSONArray("media")
+        val html = response.body?.string() ?: ""
+        val doc = Jsoup.parse(html)
+        val animeList = mutableListOf<ScrapedAnime>()
 
-            val animeList = mutableListOf<ScrapedAnime>()
-            for (i in 0 until mediaArray.length()) {
-                val animeObj = mediaArray.getJSONObject(i)
-                val titleObj = animeObj.getJSONObject("title")
-                val title = if (titleObj.isNull("english")) titleObj.getString("romaji") else titleObj.getString("english")
-                val url = "https://anilist.co/anime/${animeObj.getInt("id")}"
-                val coverImage = animeObj.getJSONObject("coverImage")
-                val poster = if (coverImage.isNull("extraLarge")) coverImage.getString("large") else coverImage.getString("extraLarge")
-                animeList.add(ScrapedAnime(title, url, poster))
+        val items = doc.select(".anime-card-container")
+        for (item in items) {
+            val title = item.select(".anime-card-title").text()
+            val link = item.select("h3 > a").attr("href")
+            val poster = item.select("img.img-responsive").attr("src")
+            if (title.isNotEmpty() && poster.isNotEmpty()) {
+                val fullPoster = if (poster.startsWith("//")) "https:$poster" else poster
+                animeList.add(ScrapedAnime(title, link, fullPoster))
             }
-            return@withContext animeList
-        } catch (e: Exception) {
-            throw Exception("Parse Err. Raw: ${jsonString.take(50)}")
         }
+        if (animeList.isEmpty()) {
+            throw Exception("Parsed but found 0 anime. Selectors are wrong.")
+        }
+        return@withContext animeList
     }
 }
