@@ -96,4 +96,5 @@ dependencies {
     implementation("androidx.sqlite:sqlite:2.4.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jsoup:jsoup:1.17.2")
+    implementation("dev.chrisbanes.haze:haze:0.9.0")
 }
