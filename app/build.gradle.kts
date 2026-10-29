@@ -49,6 +49,9 @@ android {
 
 configurations.all {
     resolutionStrategy {
+        force("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
+        force("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.22")
+        force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22")
         force("androidx.appcompat:appcompat:1.6.1")
         force("androidx.appcompat:appcompat-resources:1.6.1")
         force("androidx.sqlite:sqlite:2.4.0")
@@ -96,5 +99,5 @@ dependencies {
     implementation("androidx.sqlite:sqlite:2.4.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jsoup:jsoup:1.17.2")
-    implementation("dev.chrisbanes.haze:haze:0.7.3")
+    implementation("dev.chrisbanes.haze:haze:0.6.0")
 }
