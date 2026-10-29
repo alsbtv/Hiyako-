@@ -27,42 +27,15 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
         Spacer(modifier = Modifier.height(16.dp))
 
         when (val state = uiState) {
-            is HomeUiState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFFE91E63))
-                }
-            }
-            is HomeUiState.Error -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = state.message, color = Color.White)
-                }
-            }
+            is HomeUiState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color(0xFFE91E63)) }
+            is HomeUiState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(text = state.message, color = Color.White) }
             is HomeUiState.Success -> {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(state.animeList) { anime ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().aspectRatio(0.7f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF15202B))
-                        ) {
+                        Card(modifier = Modifier.fillMaxWidth().aspectRatio(0.7f), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF15202B))) {
                             Column {
-                                AsyncImage(
-                                    model = anime.posterUrl,
-                                    contentDescription = anime.title,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                                )
-                                Text(
-                                    text = anime.title,
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    maxLines = 2,
-                                    modifier = Modifier.padding(8.dp)
-                                )
+                                AsyncImage(model = anime.posterUrl, contentDescription = anime.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)))
+                                Text(text = anime.title, color = Color.White, fontSize = 14.sp, maxLines = 2, modifier = Modifier.padding(8.dp))
                             }
                         }
                     }

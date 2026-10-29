@@ -27,10 +27,10 @@ class HomeViewModel @Inject constructor(private val scraper: WitAnimeScraper) : 
         viewModelScope.launch {
             try {
                 val latest = scraper.getLatestAnime()
-                if (latest.isEmpty()) _uiState.value = HomeUiState.Error("لا توجد نتائج")
+                if (latest.isEmpty()) _uiState.value = HomeUiState.Error("No results found")
                 else _uiState.value = HomeUiState.Success(latest)
             } catch (e: Exception) {
-                _uiState.value = HomeUiState.Error("خطأ: ${e.message}")
+                _uiState.value = HomeUiState.Error("Error: ${e.message}")
             }
         }
     }

@@ -8,6 +8,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import android.util.Log
 
 class WitAnimeScraper @Inject constructor() {
     private val client = OkHttpClient.Builder()
@@ -27,15 +28,20 @@ class WitAnimeScraper @Inject constructor() {
     }
 
     suspend fun getLatestAnime(): List<ScrapedAnime> = withContext(Dispatchers.IO) {
-        val doc = getDocument("https://witanime.cyou/")
-        val animeList = mutableListOf<ScrapedAnime>()
-        val items = doc.select(".anime-card-container")
-        for (item in items) {
-            val title = item.select(".anime-card-title").text()
-            val link = item.select("a").attr("href")
-            val poster = item.select("img").attr("src")
-            if (title.isNotEmpty()) animeList.add(ScrapedAnime(title, link, poster))
+        try {
+            val doc = getDocument("https://witanime.com/")
+            val animeList = mutableListOf<ScrapedAnime>()
+            val items = doc.select(".anime-card-container")
+            for (item in items) {
+                val title = item.select(".anime-card-title").text()
+                val link = item.select("a").attr("href")
+                val poster = item.select("img").attr("src")
+                if (title.isNotEmpty()) animeList.add(ScrapedAnime(title, link, poster))
+            }
+            return@withContext animeList
+        } catch (e: Exception) {
+            Log.e("WitAnimeScraper", "Error: ${e.message}")
+            return@withContext emptyList()
         }
-        return@withContext animeList
     }
 }
