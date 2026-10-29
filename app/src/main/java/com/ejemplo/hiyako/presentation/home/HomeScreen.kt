@@ -1,14 +1,17 @@
 package com.ejemplo.hiyako.presentation.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,24 +25,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.ejemplo.hiyako.scraper.ScrapedAnime
+import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
+fun HomeScreen(navController: NavController, viewModel: HomeViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Hiyako", color = Color(0xFFE91E63), fontSize = 28.sp, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { /* TODO: Drawer */ }) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
-                    }
-                },
                 actions = {
-                    IconButton(onClick = { /* TODO: Search */ }) {
+                    IconButton(onClick = { navController.navigate("search") }) {
                         Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.White)
                     }
                 },
@@ -57,30 +58,18 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     item {
-                        if (state.animeList.isNotEmpty()) {
-                            HeroBanner(state.animeList.first())
-                        }
+                        Text("Featured Today", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                        AutoScrollingBanner(state.animeList.take(5), navController)
                     }
                     item {
-                        SectionTitle("أحدث الحلقات")
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text("Latest Episodes", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(state.animeList) { anime ->
-                                AnimeCard(anime, width = 140.dp, height = 200.dp)
-                            }
-                        }
-                    }
-                    item {
-                        Spacer(modifier = Modifier.height(24.dp))
-                        SectionTitle("الأكثر شعبية")
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(state.animeList.reversed()) { anime ->
-                                AnimeCard(anime, width = 120.dp, height = 170.dp)
+                                AnimeCard(anime, navController)
                             }
                         }
                     }
@@ -90,85 +79,63 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun HeroBanner(anime: com.ejemplo.hiyako.scraper.ScrapedAnime) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(350.dp)
-    ) {
-        AsyncImage(
-            model = anime.posterUrl,
-            contentDescription = "Banner",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color(0xFF0B131D)),
-                        startY = 300f
-                    )
-                )
-        )
-        Column(
-            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
-        ) {
-            Text(text = anime.title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = { },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63))
-            ) {
-                Text("مشاهدة الآن", color = Color.White)
+fun AutoScrollingBanner(animeList: List<ScrapedAnime>, navController: NavController) {
+    if (animeList.isEmpty()) return
+    val pagerState = rememberPagerState { animeList.size }
+    
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(3000)
+            pagerState.animateScrollToPage((pagerState.currentPage + 1) % animeList.size)
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 16.dp)) {
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            val anime = animeList[page]
+            Box(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).clickable { 
+                val encoded = java.net.URLEncoder.encode("${anime.title}|${anime.posterUrl}", "UTF-8")
+                navController.navigate("details/$encoded")
+            }) {
+                AsyncImage(model = anime.posterUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B131D)))))
+                Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+                    Text(anime.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.background(Color(0xFFE91E63), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                            Text("On Going", color = Color.White, fontSize = 10.sp)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
+                        Text(" 4.9", color = Color.White, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        Row(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            repeat(animeList.size) { index ->
+                Box(modifier = Modifier.size(if (index == pagerState.currentPage) 8.dp else 6.dp).background(if (index == pagerState.currentPage) Color(0xFFE91E63) else Color.Gray, androidx.compose.foundation.shape.CircleShape))
             }
         }
     }
 }
 
 @Composable
-fun SectionTitle(title: String) {
-    Text(
-        text = title,
-        color = Color.White,
-        fontSize = 18.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-    )
-}
-
-@Composable
-fun AnimeCard(anime: com.ejemplo.hiyako.scraper.ScrapedAnime, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
-    Card(
-        modifier = Modifier.width(width).height(height),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF15202B))
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = anime.posterUrl,
-                contentDescription = anime.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .height(60.dp)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B131D))))
-            )
-            Text(
-                text = anime.title,
-                color = Color.White,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
-            )
+fun AnimeCard(anime: ScrapedAnime, navController: NavController) {
+    Column(modifier = Modifier.width(140.dp).clickable { 
+        val encoded = java.net.URLEncoder.encode("${anime.title}|${anime.posterUrl}", "UTF-8")
+        navController.navigate("details/$encoded")
+    }) {
+        Box(modifier = Modifier.height(200.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))) {
+            AsyncImage(model = anime.posterUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B131D)))))
+            Column(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+                Text(anime.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("الحلقة ${anime.episodeNumber}", color = Color(0xFF8899A6), fontSize = 10.sp)
+            }
         }
     }
 }

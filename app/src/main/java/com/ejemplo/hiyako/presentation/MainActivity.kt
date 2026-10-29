@@ -2,6 +2,7 @@ package com.ejemplo.hiyako.presentation
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -9,13 +10,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.activity.compose.setContent
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.ejemplo.hiyako.presentation.details.DetailsScreen
 import com.ejemplo.hiyako.presentation.home.HomeScreen
+import com.ejemplo.hiyako.presentation.search.SearchScreen
 import com.ejemplo.hiyako.presentation.theme.HiyakoTheme
 import dagger.hilt.android.AndroidEntryPoint
-
-data class BottomNavItem(val name: String, val icon: ImageVector)
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -23,36 +26,31 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             HiyakoTheme {
-                val items = listOf(
-                    BottomNavItem("الرئيسية", Icons.Default.Home),
-                    BottomNavItem("البحث", Icons.Default.Search),
-                    BottomNavItem("المكتبة", Icons.Default.List),
-                    BottomNavItem("AI", Icons.Default.Star),
-                    BottomNavItem("الملف", Icons.Default.Person)
-                )
-                var selectedItem by remember { mutableIntStateOf(0) }
+                val navController = rememberNavController()
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route
 
                 Scaffold(
                     bottomBar = {
-                        NavigationBar(containerColor = Color(0xFF0B131D)) {
-                            items.forEachIndexed { index, item ->
-                                NavigationBarItem(
-                                    selected = selectedItem == index,
-                                    onClick = { selectedItem = index },
-                                    label = { Text(item.name) },
-                                    icon = { Icon(item.icon, contentDescription = item.name) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = Color(0xFFE91E63),
-                                        unselectedIconColor = Color.Gray
-                                    )
-                                )
+                        if (currentRoute != "details") {
+                            NavigationBar(containerColor = Color(0xFF15202B)) {
+                                NavigationBarItem(icon = { Icon(Icons.Default.Home, contentDescription = null) }, label = { Text("Home") }, selected = currentRoute == "home", onClick = { navController.navigate("home") }, colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFE91E63), selectedTextColor = Color(0xFFE91E63), unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray))
+                                NavigationBarItem(icon = { Icon(Icons.Default.Search, contentDescription = null) }, label = { Text("Search") }, selected = currentRoute == "search", onClick = { navController.navigate("search") }, colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFE91E63), selectedTextColor = Color(0xFFE91E63), unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray))
+                                NavigationBarItem(icon = { Icon(Icons.Default.List, contentDescription = null) }, label = { Text("Library") }, selected = currentRoute == "library", onClick = { }, colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.Gray))
+                                NavigationBarItem(icon = { Icon(Icons.Default.Star, contentDescription = null) }, label = { Text("AI") }, selected = currentRoute == "ai", onClick = { }, colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.Gray))
+                                NavigationBarItem(icon = { Icon(Icons.Default.Person, contentDescription = null) }, label = { Text("Profile") }, selected = currentRoute == "profile", onClick = { }, colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.Gray))
                             }
                         }
-                    }
-                ) { paddingValues ->
-                    when (selectedItem) {
-                        0 -> HomeScreen()
-                        else -> Text("Section ${items[selectedItem].name}", modifier = Modifier.padding(paddingValues))
+                    },
+                    containerColor = Color(0xFF0B131D)
+                ) { padding ->
+                    NavHost(navController = navController, startDestination = "home", modifier = Modifier.padding(padding)) {
+                        composable("home") { HomeScreen(navController) }
+                        composable("search") { SearchScreen() }
+                        composable("details/{animeUrl}") { backStackEntry ->
+                            val url = backStackEntry.arguments?.getString("animeUrl") ?: ""
+                            DetailsScreen(url, navController)
+                        }
                     }
                 }
             }
