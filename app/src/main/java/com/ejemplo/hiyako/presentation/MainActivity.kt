@@ -4,26 +4,26 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.ejemplo.hiyako.presentation.components.GlassBottomBar
 import com.ejemplo.hiyako.presentation.details.DetailsScreen
 import com.ejemplo.hiyako.presentation.home.HomeScreen
 import com.ejemplo.hiyako.presentation.search.SearchScreen
 import com.ejemplo.hiyako.presentation.theme.HiyakoTheme
 import dagger.hilt.android.AndroidEntryPoint
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -35,91 +35,39 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
-                val hazeState = remember { HazeState() }
-
                 Scaffold(
                     bottomBar = {
                         if (currentRoute != "details") {
-                            GlassBottomBar(hazeState = hazeState) {
-                                NavigationBar(containerColor = Color.Transparent) {
-                                    NavigationBarItem(
-                                        icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                                        label = { Text("Home") },
-                                        selected = currentRoute == "home",
-                                        onClick = { navController.navigate("home") },
-                                        colors = NavigationBarItemDefaults.colors(
-                                            selectedIconColor = Color(0xFFE91E63),
-                                            selectedTextColor = Color(0xFFE91E63),
-                                            unselectedIconColor = Color.Gray,
-                                            unselectedTextColor = Color.Gray,
-                                            indicatorColor = Color.Transparent
-                                        )
-                                    )
-                                    NavigationBarItem(
-                                        icon = { Icon(Icons.Default.Search, contentDescription = null) },
-                                        label = { Text("Search") },
-                                        selected = currentRoute == "search",
-                                        onClick = { navController.navigate("search") },
-                                        colors = NavigationBarItemDefaults.colors(
-                                            selectedIconColor = Color(0xFFE91E63),
-                                            selectedTextColor = Color(0xFFE91E63),
-                                            unselectedIconColor = Color.Gray,
-                                            unselectedTextColor = Color.Gray,
-                                            indicatorColor = Color.Transparent
-                                        )
-                                    )
-                                    NavigationBarItem(
-                                        icon = { Icon(Icons.Default.List, contentDescription = null) },
-                                        label = { Text("Library") },
-                                        selected = currentRoute == "library",
-                                        onClick = { },
-                                        colors = NavigationBarItemDefaults.colors(
-                                            unselectedIconColor = Color.Gray,
-                                            indicatorColor = Color.Transparent
-                                        )
-                                    )
-                                    NavigationBarItem(
-                                        icon = { Icon(Icons.Default.Star, contentDescription = null) },
-                                        label = { Text("AI") },
-                                        selected = currentRoute == "ai",
-                                        onClick = { },
-                                        colors = NavigationBarItemDefaults.colors(
-                                            unselectedIconColor = Color.Gray,
-                                            indicatorColor = Color.Transparent
-                                        )
-                                    )
-                                    NavigationBarItem(
-                                        icon = { Icon(Icons.Default.Person, contentDescription = null) },
-                                        label = { Text("Profile") },
-                                        selected = currentRoute == "profile",
-                                        onClick = { },
-                                        colors = NavigationBarItemDefaults.colors(
-                                            unselectedIconColor = Color.Gray,
-                                            indicatorColor = Color.Transparent
-                                        )
-                                    )
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(0.9f).clip(androidx.compose.foundation.shape.RoundedCornerShape(30.dp)),
+                                    color = Color(0xEE1E1B26), // Semi-transparent dark
+                                    tonalElevation = 8.dp
+                                ) {
+                                    NavigationBar(
+                                        containerColor = Color.Transparent,
+                                        tonalElevation = 0.dp
+                                    ) {
+                                        NavigationBarItem(icon = { Icon(Icons.Default.Home, contentDescription = null) }, label = { Text("Home") }, selected = currentRoute == "home", onClick = { navController.navigate("home") }, colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFB388FF), selectedTextColor = Color(0xFFB388FF), unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray))
+                                        NavigationBarItem(icon = { Icon(Icons.Default.Search, contentDescription = null) }, label = { Text("Search") }, selected = currentRoute == "search", onClick = { navController.navigate("search") }, colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFB388FF), selectedTextColor = Color(0xFFB388FF), unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray))
+                                        NavigationBarItem(icon = { Icon(Icons.Default.List, contentDescription = null) }, label = { Text("News") }, selected = currentRoute == "news", onClick = { navController.navigate("news") }, colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFB388FF), selectedTextColor = Color(0xFFB388FF), unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray))
+                                        NavigationBarItem(icon = { Icon(Icons.Default.Star, contentDescription = null) }, label = { Text("AI") }, selected = false, onClick = { }, colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray))
+                                    }
                                 }
                             }
                         }
                     },
                     containerColor = Color(0xFF0B131D)
                 ) { padding ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .hazeSource(hazeState)
-                    ) {
-                        NavHost(
-                            navController = navController,
-                            startDestination = "home",
-                            modifier = Modifier.padding(padding)
-                        ) {
-                            composable("home") { HomeScreen(navController) }
-                            composable("search") { SearchScreen() }
-                            composable("details/{animeUrl}") { backStackEntry ->
-                                val url = backStackEntry.arguments?.getString("animeUrl") ?: ""
-                                DetailsScreen(url, navController)
-                            }
+                    NavHost(navController = navController, startDestination = "home", modifier = Modifier.padding(padding)) {
+                        composable("home") { HomeScreen(navController) }
+                        composable("search") { SearchScreen() }
+                        composable("details/{animeUrl}") { backStackEntry ->
+                            val url = backStackEntry.arguments?.getString("animeUrl") ?: ""
+                            DetailsScreen(url, navController)
                         }
                     }
                 }
