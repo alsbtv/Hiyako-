@@ -20,9 +20,10 @@ class TranslateApi @Inject constructor() {
         if (text.isBlank()) return@withContext text
         RateLimiter.throttleTranslate()
         try {
-            val encoded = URLEncoder.encode(text, "UTF-8")
+            val encodedText = URLEncoder.encode(text, "UTF-8")
+            val workerUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=https://lingva.ml/api/v1/en/ar/$encodedText"
             val lingvaReq = Request.Builder()
-                .url("https://lingva.ml/api/v1/en/ar/$encoded")
+                .url(workerUrl)
                 .build()
 
             client.newCall(lingvaReq).execute().use { response ->

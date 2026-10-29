@@ -68,8 +68,9 @@ class AniListApi @Inject constructor() {
                 .put("variables", variables)
 
             val body = jsonBody.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val workerUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=https://graphql.anilist.co"
             val request = Request.Builder()
-                .url("https://graphql.anilist.co")
+                .url(workerUrl)
                 .post(body)
                 .build()
 

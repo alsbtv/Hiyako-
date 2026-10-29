@@ -18,10 +18,9 @@ class JikanApi @Inject constructor() {
     suspend fun getAnimeDetails(title: String): ScrapedAnime? = withContext(Dispatchers.IO) {
         RateLimiter.throttleJikan()
         try {
-            val encoded = URLEncoder.encode(title, "UTF-8")
-            val request = Request.Builder()
-                .url("https://api.jikan.moe/v4/anime?q=$encoded&limit=1")
-                .build()
+            val encodedTitle = URLEncoder.encode(title, "UTF-8")
+            val workerUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=https://api.jikan.moe/v4/anime?q=$encodedTitle&limit=1"
+            val request = Request.Builder().url(workerUrl).build()
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
