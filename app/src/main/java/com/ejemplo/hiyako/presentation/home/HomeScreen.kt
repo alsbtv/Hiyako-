@@ -95,11 +95,12 @@ fun AutoScrollingBanner(animeList: List<ScrapedAnime>, navController: NavControl
     Box(modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 16.dp)) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             val anime = animeList[page]
+            val bannerImage = anime.bannerUrl ?: anime.posterUrl
             Box(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).clickable { 
                 val encoded = java.net.URLEncoder.encode("${anime.title}|${anime.posterUrl}", "UTF-8")
                 navController.navigate("details/$encoded")
             }) {
-                AsyncImage(model = anime.posterUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                AsyncImage(model = bannerImage, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B131D)))))
                 Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
                     Text(anime.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2)
@@ -110,14 +111,9 @@ fun AutoScrollingBanner(animeList: List<ScrapedAnime>, navController: NavControl
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
-                        Text(" 4.9", color = Color.White, fontSize = 12.sp)
+                        Text(" ${anime.score ?: 4.9}", color = Color.White, fontSize = 12.sp)
                     }
                 }
-            }
-        }
-        Row(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            repeat(animeList.size) { index ->
-                Box(modifier = Modifier.size(if (index == pagerState.currentPage) 8.dp else 6.dp).background(if (index == pagerState.currentPage) Color(0xFFE91E63) else Color.Gray, androidx.compose.foundation.shape.CircleShape))
             }
         }
     }
@@ -125,17 +121,31 @@ fun AutoScrollingBanner(animeList: List<ScrapedAnime>, navController: NavControl
 
 @Composable
 fun AnimeCard(anime: ScrapedAnime, navController: NavController) {
-    Column(modifier = Modifier.width(140.dp).clickable { 
-        val encoded = java.net.URLEncoder.encode("${anime.title}|${anime.posterUrl}", "UTF-8")
-        navController.navigate("details/$encoded")
-    }) {
-        Box(modifier = Modifier.height(200.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))) {
-            AsyncImage(model = anime.posterUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B131D)))))
-            Column(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
-                Text(anime.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("الحلقة ${anime.episodeNumber}", color = Color(0xFF8899A6), fontSize = 10.sp)
+    Column(
+        modifier = Modifier
+            .width(130.dp)
+            .clickable {
+                val encoded = java.net.URLEncoder.encode("${anime.title}|${anime.posterUrl}", "UTF-8")
+                navController.navigate("details/$encoded")
             }
-        }
+    ) {
+        AsyncImage(
+            model = anime.posterUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .width(130.dp)
+                .height(180.dp)
+                .clip(RoundedCornerShape(12.dp))
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = anime.title,
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }

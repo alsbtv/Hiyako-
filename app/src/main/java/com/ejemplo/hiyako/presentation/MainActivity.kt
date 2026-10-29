@@ -21,6 +21,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ejemplo.hiyako.presentation.details.DetailsScreen
 import com.ejemplo.hiyako.presentation.home.HomeScreen
+import com.ejemplo.hiyako.presentation.news.NewsScreen
 import com.ejemplo.hiyako.presentation.search.SearchScreen
 import com.ejemplo.hiyako.presentation.theme.HiyakoTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -65,6 +66,7 @@ class MainActivity : ComponentActivity() {
                     NavHost(navController = navController, startDestination = "home", modifier = Modifier.padding(padding)) {
                         composable("home") { HomeScreen(navController) }
                         composable("search") { SearchScreen() }
+                        composable("news") { NewsScreen() }
                         composable("details/{animeUrl}") { backStackEntry ->
                             val url = backStackEntry.arguments?.getString("animeUrl") ?: ""
                             DetailsScreen(url, navController)
