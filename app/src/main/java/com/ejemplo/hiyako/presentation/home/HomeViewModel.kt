@@ -3,7 +3,7 @@ package com.ejemplo.hiyako.presentation.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ejemplo.hiyako.data.api.AniListApi
-import com.ejemplo.hiyako.scraper.ScrapedAnime
+import com.ejemplo.hiyako.data.model.ScrapedAnime
 import com.ejemplo.hiyako.scraper.WitAnimeScraper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow

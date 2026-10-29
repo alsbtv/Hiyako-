@@ -38,7 +38,8 @@ fun NewsScreen(
             text = "Anime News",
             color = Color.White,
             fontSize = 24.sp,
-            style = MaterialTheme.typography.bold,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
