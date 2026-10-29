@@ -17,48 +17,43 @@ class WitAnimeScraper @Inject constructor() {
 
     suspend fun getLatestAnime(): List<ScrapedAnime> = withContext(Dispatchers.IO) {
         try {
-            // استخدام المتصفح الوهمي لتجاوز الحظر
             val request = Request.Builder()
                 .url("https://anime3rb.com/")
                 .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-                .addHeader("Accept-Language", "en-US,en;q=0.5")
                 .build()
-
+                
             val response = client.newCall(request).execute()
-            
-            if (!response.isSuccessful) {
-                throw Exception("HTTP ${response.code}")
-            }
+            if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
 
             val html = response.body?.string() ?: ""
             val doc = Jsoup.parse(html)
             val animeList = mutableListOf<ScrapedAnime>()
 
-            // استخراج الحلقات من الصفحة الرئيسية بناءً على كود بايثون
             val episodeLinks = doc.select("a[href*=/episode/]")
             
             for (link in episodeLinks) {
                 val href = link.attr("href")
-                val title = link.text().trim()
+                val rawTitle = link.text().trim()
                 val img = link.select("img").attr("src")
                 
-                if (title.isNotEmpty() && img.isNotEmpty() && href.contains("/episode/")) {
+                if (rawTitle.isNotEmpty() && img.isNotEmpty() && href.contains("/episode/")) {
                     val fullImg = if (img.startsWith("//")) "https:$img" else img
                     
-                    // Extraer número de episodio del título
-                    val epRegex = "(\\d+)".toRegex()
-                    val matchResult = epRegex.find(title)
-                    val epNumber = matchResult?.groupValue(1) ?: "1"
+                    // Extract episode number safely using Kotlin Regex
+                    var episodeNum = ""
+                    var cleanTitle = rawTitle
                     
-                    // Limpiar título quitando el número de episodio
-                    val cleanTitle = title.replace(epNumber, "").replace("الحلقة", "").trim()
+                    val epRegex = Regex("""(?:الحلقة|Episode|Ep)\s*(\d+)""", RegexOption.IGNORE_CASE)
+                    val match = epRegex.find(rawTitle)
+                    if (match != null) {
+                        episodeNum = match.groupValues[1] // Correct syntax is groupValues
+                        cleanTitle = rawTitle.replace(match.value, "").trim()
+                    }
                     
-                    animeList.add(ScrapedAnime(cleanTitle, epNumber, href, fullImg))
+                    animeList.add(ScrapedAnime(cleanTitle, href, fullImg, episodeNum))
                 }
             }
             
-            // إزالة التكرار
             return@withContext animeList.distinctBy { it.url }.take(20)
             
         } catch (e: Exception) {
