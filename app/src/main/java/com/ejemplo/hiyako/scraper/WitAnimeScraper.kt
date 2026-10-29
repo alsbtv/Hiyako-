@@ -4,8 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import android.util.Log
@@ -14,33 +13,28 @@ class WitAnimeScraper @Inject constructor() {
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor { chain ->
-            val request = chain.request().newBuilder()
-                .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                .build()
-            chain.proceed(request)
-        }.build()
-
-    private suspend fun getDocument(url: String): Document = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(url).build()
-        val response = client.newCall(request).execute()
-        return@withContext Jsoup.parse(response.body?.string() ?: "")
-    }
+        .build()
 
     suspend fun getLatestAnime(): List<ScrapedAnime> = withContext(Dispatchers.IO) {
         try {
-            val doc = getDocument("https://witanime.com/")
+            val request = Request.Builder().url("https://api.jikan.moe/v4/top/anime").build()
+            val response = client.newCall(request).execute()
+            val jsonString = response.body?.string() ?: ""
+            val jsonObject = JSONObject(jsonString)
+            val dataArray = jsonObject.getJSONArray("data")
+            
             val animeList = mutableListOf<ScrapedAnime>()
-            val items = doc.select(".anime-card-container")
-            for (item in items) {
-                val title = item.select(".anime-card-title").text()
-                val link = item.select("a").attr("href")
-                val poster = item.select("img").attr("src")
-                if (title.isNotEmpty()) animeList.add(ScrapedAnime(title, link, poster))
+            for (i in 0 until dataArray.length()) {
+                val animeObj = dataArray.getJSONObject(i)
+                val title = animeObj.getString("title")
+                val url = animeObj.getString("url")
+                val imagesObj = animeObj.getJSONObject("images").getJSONObject("jpg")
+                val poster = imagesObj.getString("image_url")
+                animeList.add(ScrapedAnime(title, url, poster))
             }
             return@withContext animeList
         } catch (e: Exception) {
-            Log.e("WitAnimeScraper", "Error: ${e.message}")
+            Log.e("ScraperError", "Error: ${e.message}")
             return@withContext emptyList()
         }
     }
