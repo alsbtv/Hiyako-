@@ -7,6 +7,7 @@ import okhttp3.Request
 import org.jsoup.Jsoup
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import android.util.Log
 
 class WitAnimeScraper @Inject constructor() {
     private val client = OkHttpClient.Builder()
@@ -15,45 +16,45 @@ class WitAnimeScraper @Inject constructor() {
         .build()
 
     suspend fun getLatestAnime(): List<ScrapedAnime> = withContext(Dispatchers.IO) {
-        val targetUrl = "https://witanime.com/"
-        val proxyUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=" + targetUrl
-        val request = Request.Builder().url(proxyUrl).build()
-        val response = client.newCall(request).execute()
-        if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
+        try {
+            // استخدام المتصفح الوهمي لتجاوز الحظر
+            val request = Request.Builder()
+                .url("https://anime3rb.com/")
+                .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+                .addHeader("Accept-Language", "en-US,en;q=0.5")
+                .build()
 
-        val html = response.body?.string() ?: ""
-        val doc = Jsoup.parse(html)
-        val animeList = mutableListOf<ScrapedAnime>()
-
-        // Try multiple selectors to find the anime cards
-        var items = doc.select(".anime-card-container")
-        if (items.isEmpty()) items = doc.select(".post-item")
-        if (items.isEmpty()) items = doc.select(".anime-card")
-
-        for (item in items) {
-            // Try multiple title selectors
-            var title = item.select(".anime-card-title").text()
-            if (title.isEmpty()) title = item.select("h2").text()
-            if (title.isEmpty()) title = item.select("h3").text()
-            if (title.isEmpty()) title = item.select("h3 > a").text() // fallback
-
-            // Try multiple link selectors
-            var link = item.select("h3 > a").attr("href")
-            if (link.isEmpty()) link = item.select("a").attr("href")
-
-            // Try multiple poster selectors
-            var poster = item.select("img").attr("src")
-            if (poster.isEmpty()) poster = item.select("img").attr("data-src")
-
-            if (title.isNotEmpty() && poster.isNotEmpty()) {
-                val fullPoster = if (poster.startsWith("//")) "https:$poster" else poster
-                animeList.add(ScrapedAnime(title, link, fullPoster))
+            val response = client.newCall(request).execute()
+            
+            if (!response.isSuccessful) {
+                throw Exception("HTTP ${response.code}")
             }
-        }
 
-        if (animeList.isEmpty()) {
-            throw Exception("Parsed but found 0 anime. Raw HTML: ${html.take(100)}")
+            val html = response.body?.string() ?: ""
+            val doc = Jsoup.parse(html)
+            val animeList = mutableListOf<ScrapedAnime>()
+
+            // استخراج الحلقات من الصفحة الرئيسية بناءً على كود بايثون
+            val episodeLinks = doc.select("a[href*=/episode/]")
+            
+            for (link in episodeLinks) {
+                val href = link.attr("href")
+                val title = link.text().trim()
+                val img = link.select("img").attr("src")
+                
+                if (title.isNotEmpty() && img.isNotEmpty() && href.contains("/episode/")) {
+                    val fullImg = if (img.startsWith("//")) "https:$img" else img
+                    animeList.add(ScrapedAnime(title, href, fullImg))
+                }
+            }
+            
+            // إزالة التكرار
+            return@withContext animeList.distinctBy { it.url }.take(20)
+            
+        } catch (e: Exception) {
+            Log.e("ScraperError", "Error: ${e.message}")
+            throw e
         }
-        return@withContext animeList
     }
 }
