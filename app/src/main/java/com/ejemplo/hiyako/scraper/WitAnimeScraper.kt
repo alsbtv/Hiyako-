@@ -9,7 +9,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
-import android.util.Log
 
 class WitAnimeScraper @Inject constructor() {
     private val client = OkHttpClient.Builder()
@@ -18,31 +17,40 @@ class WitAnimeScraper @Inject constructor() {
         .build()
 
     suspend fun getLatestAnime(): List<ScrapedAnime> = withContext(Dispatchers.IO) {
-        try {
-            val query = """
-                query {
-                  Page(page: 1, perPage: 20) {
-                    media(type: ANIME, sort: POPULARITY_DESC) {
-                      id
-                      title { romaji english }
-                      coverImage { extraLarge large }
-                    }
-                  }
+        val query = """
+            query {
+              Page(page: 1, perPage: 20) {
+                media(type: ANIME, sort: POPULARITY_DESC) {
+                  id
+                  title { romaji english }
+                  coverImage { extraLarge large }
                 }
-            """.trimIndent()
+              }
+            }
+        """.trimIndent()
 
-            val jsonBody = JSONObject().put("query", query).toString()
-            val mediaType = "application/json; charset=utf-8".toMediaType()
-            val requestBody = jsonBody.toRequestBody(mediaType)
+        val jsonBody = JSONObject().put("query", query).toString()
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonBody.toRequestBody(mediaType)
 
-            val workerUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=https://graphql.anilist.co"
-            val request = Request.Builder().url(workerUrl).post(requestBody).build()
+        val workerUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=https://graphql.anilist.co"
+        val request = Request.Builder().url(workerUrl).post(requestBody).build()
 
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
+        val response = client.newCall(request).execute()
+        val jsonString = response.body?.string() ?: ""
+        
+        if (!response.isSuccessful) {
+            throw Exception("HTTP ${response.code}: ${jsonString.take(50)}")
+        }
+        if (jsonString.isEmpty()) {
+            throw Exception("Received empty string from server")
+        }
 
-            val jsonString = response.body?.string() ?: ""
+        try {
             val jsonObject = JSONObject(jsonString)
+            if (!jsonObject.has("data")) {
+                 throw Exception("Missing 'data' key. Raw: ${jsonString.take(50)}")
+            }
             val mediaArray = jsonObject.getJSONObject("data").getJSONObject("Page").getJSONArray("media")
 
             val animeList = mutableListOf<ScrapedAnime>()
@@ -57,8 +65,7 @@ class WitAnimeScraper @Inject constructor() {
             }
             return@withContext animeList
         } catch (e: Exception) {
-            Log.e("ScraperError", "Error: ${e.message}")
-            return@withContext emptyList()
+            throw Exception("Parse Err. Raw: ${jsonString.take(50)}")
         }
     }
 }
