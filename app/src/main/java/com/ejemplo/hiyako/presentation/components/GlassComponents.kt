@@ -10,7 +10,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.haze
+import dev.chrisbanes.haze.hazeChild
 
 @Composable
 fun GlassBottomBar(
@@ -22,8 +22,7 @@ fun GlassBottomBar(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 16.dp)
             .clip(RoundedCornerShape(30.dp))
-            .haze(state = hazeState) // Apply the blur effect
-            .background(Color(0x33FFFFFF)) // Semi-transparent white for the glass look
+            .hazeChild(state = hazeState, backgroundColor = Color(0x33FFFFFF))
     ) {
         content()
     }
