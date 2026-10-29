@@ -34,7 +34,8 @@ class WitAnimeScraper @Inject constructor() {
             for (link in episodeLinks) {
                 val href = link.attr("href")
                 val rawTitle = link.text().trim()
-                val img = link.select("img").attr("src")
+                var img = link.select("img").attr("data-src")
+                if (img.isEmpty()) img = link.select("img").attr("src")
                 
                 if (rawTitle.isNotEmpty() && img.isNotEmpty() && href.contains("/episode/")) {
                     val fullImg = if (img.startsWith("//")) "https:$img" else img

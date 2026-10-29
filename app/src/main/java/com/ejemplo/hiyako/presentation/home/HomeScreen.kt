@@ -2,11 +2,12 @@ package com.ejemplo.hiyako.presentation.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,99 +32,143 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = "Hiyako",
-                        color = Color(0xFFE91E63),
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                title = { Text("Hiyako", color = Color(0xFFE91E63), fontSize = 28.sp, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = { /* TODO: Drawer */ }) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                    }
                 },
                 actions = {
                     IconButton(onClick = { /* TODO: Search */ }) {
                         Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF0B131D),
-                    titleContentColor = Color.White
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0B131D))
             )
         },
         containerColor = Color(0xFF0B131D)
     ) { paddingValues ->
         when (val state = uiState) {
-            is HomeUiState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFFE91E63))
-                }
-            }
-            is HomeUiState.Error -> {
-                Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                    Text(text = state.message, color = Color.White)
-                }
-            }
+            is HomeUiState.Loading -> Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color(0xFFE91E63)) }
+            is HomeUiState.Error -> Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) { Text(text = state.message, color = Color.White) }
             is HomeUiState.Success -> {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.padding(paddingValues).fillMaxSize()
+                LazyColumn(
+                    modifier = Modifier.padding(paddingValues).fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                    items(state.animeList) { anime ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().aspectRatio(0.65f),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF15202B)),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    item {
+                        if (state.animeList.isNotEmpty()) {
+                            HeroBanner(state.animeList.first())
+                        }
+                    }
+                    item {
+                        SectionTitle("أحدث الحلقات")
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                AsyncImage(
-                                    model = anime.posterUrl,
-                                    contentDescription = anime.title,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                                
-                                // Gradient overlay for text readability
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .align(Alignment.BottomCenter)
-                                        .height(100.dp)
-                                        .background(
-                                            Brush.verticalGradient(
-                                                colors = listOf(Color.Transparent, Color(0xCC0B131D))
-                                            )
-                                        )
-                                )
-
-                                Column(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomStart)
-                                        .padding(12.dp)
-                                ) {
-                                    Text(
-                                        text = anime.title,
-                                        color = Color.White,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "الحلقة ${anime.episodeNumber}",
-                                        color = Color(0xFF8899A6),
-                                        fontSize = 12.sp
-                                    )
-                                }
+                            items(state.animeList) { anime ->
+                                AnimeCard(anime, width = 140.dp, height = 200.dp)
+                            }
+                        }
+                    }
+                    item {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        SectionTitle("الأكثر شعبية")
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(state.animeList.reversed()) { anime ->
+                                AnimeCard(anime, width = 120.dp, height = 170.dp)
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun HeroBanner(anime: com.ejemplo.hiyako.scraper.ScrapedAnime) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(350.dp)
+    ) {
+        AsyncImage(
+            model = anime.posterUrl,
+            contentDescription = "Banner",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color(0xFF0B131D)),
+                        startY = 300f
+                    )
+                )
+        )
+        Column(
+            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
+        ) {
+            Text(text = anime.title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63))
+            ) {
+                Text("مشاهدة الآن", color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+fun SectionTitle(title: String) {
+    Text(
+        text = title,
+        color = Color.White,
+        fontSize = 18.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+    )
+}
+
+@Composable
+fun AnimeCard(anime: com.ejemplo.hiyako.scraper.ScrapedAnime, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+    Card(
+        modifier = Modifier.width(width).height(height),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF15202B))
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = anime.posterUrl,
+                contentDescription = anime.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .height(60.dp)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B131D))))
+            )
+            Text(
+                text = anime.title,
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)
+            )
         }
     }
 }
