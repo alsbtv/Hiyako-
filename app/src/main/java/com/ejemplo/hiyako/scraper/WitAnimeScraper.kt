@@ -16,26 +16,30 @@ class WitAnimeScraper @Inject constructor() {
         .build()
 
     suspend fun getLatestAnime(): List<ScrapedAnime> = withContext(Dispatchers.IO) {
-        try {
-            val request = Request.Builder().url("https://api.allorigins.win/raw?url=https%3A%2F%2Fapi.jikan.moe%2Fv4%2Ftop%2Fanime").build()
-            val response = client.newCall(request).execute()
-            val jsonString = response.body?.string() ?: ""
-            val jsonObject = JSONObject(jsonString)
-            val dataArray = jsonObject.getJSONArray("data")
-            
-            val animeList = mutableListOf<ScrapedAnime>()
-            for (i in 0 until dataArray.length()) {
-                val animeObj = dataArray.getJSONObject(i)
-                val title = animeObj.getString("title")
-                val url = animeObj.getString("url")
-                val imagesObj = animeObj.getJSONObject("images").getJSONObject("jpg")
-                val poster = imagesObj.getString("image_url")
-                animeList.add(ScrapedAnime(title, url, poster))
-            }
-            return@withContext animeList
-        } catch (e: Exception) {
-            Log.e("ScraperError", "Error: ${e.message}")
-            return@withContext emptyList()
+        // Using corsproxy.io for faster bypass
+        val targetUrl = "https://api.jikan.moe/v4/top/anime"
+        val proxyUrl = "https://corsproxy.io/?${targetUrl}"
+        
+        val request = Request.Builder().url(proxyUrl).build()
+        val response = client.newCall(request).execute()
+        
+        if (!response.isSuccessful) {
+            throw Exception("HTTP ${response.code}: ${response.message}")
         }
+        
+        val jsonString = response.body?.string() ?: ""
+        val jsonObject = JSONObject(jsonString)
+        val dataArray = jsonObject.getJSONArray("data")
+        
+        val animeList = mutableListOf<ScrapedAnime>()
+        for (i in 0 until dataArray.length()) {
+            val animeObj = dataArray.getJSONObject(i)
+            val title = animeObj.getString("title")
+            val url = animeObj.getString("url")
+            val imagesObj = animeObj.getJSONObject("images").getJSONObject("jpg")
+            val poster = imagesObj.getString("image_url")
+            animeList.add(ScrapedAnime(title, url, poster))
+        }
+        return@withContext animeList
     }
 }

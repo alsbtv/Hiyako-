@@ -27,8 +27,11 @@ class HomeViewModel @Inject constructor(private val scraper: WitAnimeScraper) : 
         viewModelScope.launch {
             try {
                 val latest = scraper.getLatestAnime()
-                if (latest.isEmpty()) _uiState.value = HomeUiState.Error("No results found")
-                else _uiState.value = HomeUiState.Success(latest)
+                if (latest.isEmpty()) {
+                    _uiState.value = HomeUiState.Error("Error: Empty list returned (Parsing issue)")
+                } else {
+                    _uiState.value = HomeUiState.Success(latest)
+                }
             } catch (e: Exception) {
                 _uiState.value = HomeUiState.Error("Error: ${e.message}")
             }
