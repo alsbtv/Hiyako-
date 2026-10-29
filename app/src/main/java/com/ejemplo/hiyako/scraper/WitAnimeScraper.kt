@@ -17,7 +17,7 @@ class WitAnimeScraper @Inject constructor() {
 
     suspend fun getLatestAnime(): List<ScrapedAnime> = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder().url("https://api.jikan.moe/v4/top/anime").build()
+            val request = Request.Builder().url("https://api.allorigins.win/raw?url=https%3A%2F%2Fapi.jikan.moe%2Fv4%2Ftop%2Fanime").build()
             val response = client.newCall(request).execute()
             val jsonString = response.body?.string() ?: ""
             val jsonObject = JSONObject(jsonString)
