@@ -45,7 +45,16 @@ class WitAnimeScraper @Inject constructor() {
                 
                 if (title.isNotEmpty() && img.isNotEmpty() && href.contains("/episode/")) {
                     val fullImg = if (img.startsWith("//")) "https:$img" else img
-                    animeList.add(ScrapedAnime(title, href, fullImg))
+                    
+                    // Extraer número de episodio del título
+                    val epRegex = "(\\d+)".toRegex()
+                    val matchResult = epRegex.find(title)
+                    val epNumber = matchResult?.groupValue(1) ?: "1"
+                    
+                    // Limpiar título quitando el número de episodio
+                    val cleanTitle = title.replace(epNumber, "").replace("الحلقة", "").trim()
+                    
+                    animeList.add(ScrapedAnime(cleanTitle, epNumber, href, fullImg))
                 }
             }
             
