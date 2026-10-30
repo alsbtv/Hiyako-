@@ -32,6 +32,7 @@ import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import com.ejemplo.hiyako.presentation.details.DetailsScreen
 import com.ejemplo.hiyako.presentation.home.HomeScreen
+import com.ejemplo.hiyako.presentation.player.PlayerScreen
 import com.ejemplo.hiyako.presentation.news.NewsScreen
 import com.ejemplo.hiyako.presentation.search.SearchScreen
 import com.ejemplo.hiyako.presentation.theme.*
@@ -94,6 +95,10 @@ fun MainContainer() {
                 composable("search") { SearchScreen() }
                 composable("news") { NewsScreen() }
                 composable("details/{animeUrl}") { backStackEntry ->
+                        composable("player/{videoUrl}") { backEntry ->
+                            val videoUrl = backEntry.arguments?.getString("videoUrl") ?: ""
+                            PlayerScreen(videoUrl, navController)
+                        }
                     val url = backStackEntry.arguments?.getString("animeUrl") ?: ""
                     DetailsScreen(url, navController)
                 }
