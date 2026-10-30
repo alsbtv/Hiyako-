@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.ejemplo.hiyako.scraper.ScrapedAnime
+import com.ejemplo.hiyako.data.model.ScrapedAnime
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
