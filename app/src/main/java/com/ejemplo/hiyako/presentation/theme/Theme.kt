@@ -5,13 +5,13 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryPink,
-    background = DarkBackground,
-    surface = DarkSurface,
+    primary = AccentColor,
     onPrimary = TextPrimary,
+    background = DarkBackground,
     onBackground = TextPrimary,
+    surface = SurfaceColor,
     onSurface = TextPrimary,
-    surfaceVariant = DarkSurface
+    secondary = TextSecondary
 )
 
 @Composable
@@ -20,6 +20,7 @@ fun HiyakoTheme(
 ) {
     MaterialTheme(
         colorScheme = DarkColorScheme,
+        typography = Typography,
         content = content
     )
 }

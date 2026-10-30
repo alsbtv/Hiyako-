@@ -28,6 +28,7 @@ import com.ejemplo.hiyako.data.model.Character
 import com.ejemplo.hiyako.data.model.Episode
 import com.ejemplo.hiyako.data.api.AniListApi
 import com.ejemplo.hiyako.data.api.JikanApi
+import com.ejemplo.hiyako.presentation.theme.*
 import kotlinx.coroutines.launch
 
 @Composable
@@ -69,29 +70,29 @@ fun DetailsScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0B131D))) {
+    Box(modifier = Modifier.fillMaxSize().background(DarkBackground)) {
         AsyncImage(model = bannerUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(350.dp).alpha(0.3f))
-        Box(modifier = Modifier.fillMaxWidth().height(350.dp).background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xFF0B131D)))))
+        Box(modifier = Modifier.fillMaxWidth().height(350.dp).background(Brush.verticalGradient(listOf(Color.Transparent, DarkBackground))))
 
         LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
             item {
                 IconButton(onClick = { navController.popBackStack() }, modifier = Modifier.padding(16.dp)) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                 }
                 Spacer(modifier = Modifier.height(100.dp))
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    Text(title, color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         if (score != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
-                                Text(" $score", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.Star, contentDescription = null, tint = StarColor, modifier = Modifier.size(16.dp))
+                                Text(" $score", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                         if (studios.isNotEmpty()) {
-                            Text(studios.joinToString(", "), color = Color(0xFFB388FF), fontSize = 14.sp)
+                            Text(studios.joinToString(", "), color = AccentColor, fontSize = 14.sp)
                         }
                     }
 
@@ -100,10 +101,10 @@ fun DetailsScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             genres.take(3).forEach { genre ->
                                 Surface(
-                                    color = Color(0xFF1E1B26),
+                                    color = SurfaceColor,
                                     shape = RoundedCornerShape(6.dp)
                                 ) {
-                                    Text(text = genre, color = Color.Gray, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                    Text(text = genre, color = TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                                 }
                             }
                         }
@@ -111,76 +112,53 @@ fun DetailsScreen(
 
                     if (!synopsis.isNullOrBlank()) {
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Synopsis", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("Synopsis", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = synopsis!!, color = Color.Gray, fontSize = 14.sp)
-                    }
-
-                    if (charactersList.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Text("Characters", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            items(charactersList) { char ->
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.width(80.dp)
-                                ) {
-                                    AsyncImage(
-                                        model = char.imageUrl,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.size(70.dp).clip(CircleShape)
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = char.name,
-                                        color = Color.White,
-                                        fontSize = 11.sp,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
+                        Text(synopsis!!, color = TextSecondary, fontSize = 14.sp, lineHeight = 20.sp)
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text("Episodes", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentColor),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Watch Now", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
-            if (episodesList.isEmpty()) {
+            if (charactersList.isNotEmpty()) {
                 item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color(0xFFB388FF))
+                    Text("Characters", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        items(charactersList) { character ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(90.dp)) {
+                                AsyncImage(model = character.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(80.dp).clip(CircleShape).background(SurfaceColor))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(character.name, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.padding(horizontal = 4.dp))
+                                Text(character.role, color = TextSecondary, fontSize = 10.sp, maxLines = 1)
+                            }
+                        }
                     }
                 }
-            } else {
-                items(episodesList) { ep ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1B26)),
-                        shape = RoundedCornerShape(12.dp)
+            }
+
+            if (episodesList.isNotEmpty()) {
+                item {
+                    Text("Episodes", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                }
+                items(episodesList) { episode ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).background(SurfaceColor, RoundedCornerShape(12.dp)).padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (ep.thumbnailUrl.isNotBlank()) {
-                                AsyncImage(
-                                    model = ep.thumbnailUrl,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.width(80.dp).height(50.dp).clip(RoundedCornerShape(8.dp))
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                            }
-                            Column {
-                                Text(text = "Episode ${ep.number}", color = Color(0xFFB388FF), fontSize = 12.sp)
-                                Text(text = ep.title, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            }
+                        AsyncImage(model = episode.thumbnailUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(100.dp, 60.dp).clip(RoundedCornerShape(8.dp)).background(DarkBackground))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Episode ${episode.number}", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(episode.title, color = TextSecondary, fontSize = 12.sp, maxLines = 1)
                         }
                     }
                 }
