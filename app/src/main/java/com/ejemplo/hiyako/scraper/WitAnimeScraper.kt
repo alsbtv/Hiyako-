@@ -1,5 +1,6 @@
 package com.ejemplo.hiyako.scraper
 
+import com.ejemplo.hiyako.data.model.ScrapedAnime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -40,14 +41,13 @@ class WitAnimeScraper @Inject constructor() {
                 if (rawTitle.isNotEmpty() && img.isNotEmpty() && href.contains("/episode/")) {
                     val fullImg = if (img.startsWith("//")) "https:$img" else img
                     
-                    // Extract episode number safely using Kotlin Regex
                     var episodeNum = ""
                     var cleanTitle = rawTitle
                     
                     val epRegex = Regex("""(?:الحلقة|Episode|Ep)\s*(\d+)""", RegexOption.IGNORE_CASE)
                     val match = epRegex.find(rawTitle)
                     if (match != null) {
-                        episodeNum = match.groupValues[1] // Correct syntax is groupValues
+                        episodeNum = match.groupValues[1]
                         cleanTitle = rawTitle.replace(match.value, "").trim()
                     }
                     
