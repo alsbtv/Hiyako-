@@ -29,7 +29,7 @@ import coil.compose.AsyncImage
 import com.ejemplo.hiyako.data.model.ScrapedAnime
 import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(navController: NavController, onMenuClick: () -> Unit, viewModel: HomeViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
@@ -44,7 +44,6 @@ fun HomeScreen(navController: NavController, onMenuClick: () -> Unit, viewModel:
 
     LazyColumn(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         item {
-            // Top Bar
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onMenuClick) { Icon(Icons.Default.Menu, contentDescription = null, tint = Color.White) }
                 Text("Browse Anime", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -54,19 +53,13 @@ fun HomeScreen(navController: NavController, onMenuClick: () -> Unit, viewModel:
                 }
             }
 
-            // Hero Banner
             val bannerAnime = (uiState as? HomeUiState.Success)?.animeList?.take(5) ?: emptyList()
             Box(modifier = Modifier.fillMaxWidth().height(250.dp).padding(horizontal = 16.dp).clip(RoundedCornerShape(16.dp))) {
                 if (bannerAnime.isNotEmpty()) {
                     HorizontalPager(state = pagerState) { page ->
                         val anime = bannerAnime.getOrNull(page) ?: bannerAnime.first()
                         Box(modifier = Modifier.fillMaxSize()) {
-                            AsyncImage(
-                                model = anime.bannerUrl ?: anime.posterUrl,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                            AsyncImage(model = anime.bannerUrl ?: anime.posterUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                             Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0F1115)))))
                             Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
                                 Text(anime.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2)
@@ -82,7 +75,6 @@ fun HomeScreen(navController: NavController, onMenuClick: () -> Unit, viewModel:
             }
         }
 
-        // Sections
         when (val state = uiState) {
             is HomeUiState.Loading -> item { Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) } }
             is HomeUiState.Error -> item { Text(state.message, color = Color.Red, modifier = Modifier.padding(16.dp)) }
@@ -90,14 +82,7 @@ fun HomeScreen(navController: NavController, onMenuClick: () -> Unit, viewModel:
                 item {
                     SectionHeader("Recently Added")
                     LazyRow(contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(state.animeList) { anime ->
-                            AnimeCard(anime, navController)
-                        }
-                    }
-                }
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color.Gray, modifier = Modifier.size(24.dp))
+                        items(state.animeList) { anime -> AnimeCard(anime, navController) }
                     }
                 }
             }
@@ -121,13 +106,10 @@ fun AnimeCard(anime: ScrapedAnime, navController: NavController) {
     }) {
         Box(modifier = Modifier.height(180.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp))) {
             AsyncImage(model = anime.posterUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            
-            // Source Badge (Green for Anime3rb, Blue for Anime4Up)
             val badgeColor = if (anime.sourceName == "Anime4Up") Color(0xFF2196F3) else Color(0xFF4CAF50)
             Box(modifier = Modifier.align(Alignment.TopStart).padding(4.dp).background(badgeColor, RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
                 Text(anime.sourceName, color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
-            
             Box(modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
                 Text("17+", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
