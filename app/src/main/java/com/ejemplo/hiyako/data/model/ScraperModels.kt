@@ -24,7 +24,12 @@ data class ScrapedAnime(
     val studios: List<String>? = null,
     val genres: List<String>? = null,
     val episodesList: List<Episode> = emptyList(),
-    val characters: List<Character> = emptyList()
+    val characters: List<Character> = emptyList(),
+    val status: String = "On Going",
+    val type: String = "TV",
+    val year: String = "2026",
+    val ageRating: String = "+17",
+    val voteCount: String = "1.3M"
 )
 
 data class NewsArticle(

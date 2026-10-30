@@ -238,7 +238,7 @@ fun PremiumAnimeCard(anime: ScrapedAnime, navController: NavController) {
             )
             
             // Badges
-            val isOngoing = anime.episodeNumber?.toIntOrNull() != null // Mock check
+            val isOngoing = anime.status == "On Going"
             
             // Top-Left: Status
             Surface(
@@ -247,7 +247,7 @@ fun PremiumAnimeCard(anime: ScrapedAnime, navController: NavController) {
                 shape = RoundedCornerShape(4.dp)
             ) {
                 Text(
-                    text = if (isOngoing) "On Going" else "Completed",
+                    text = anime.status,
                     color = Color.White,
                     fontSize = 10.sp,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -255,22 +255,22 @@ fun PremiumAnimeCard(anime: ScrapedAnime, navController: NavController) {
                 )
             }
 
-            // Top-Right: Age Rating (Mock)
+            // Top-Right: Age Rating
             Surface(
                 modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
                 color = AccentColor,
                 shape = RoundedCornerShape(4.dp)
             ) {
-                Text("+17", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                Text(anime.ageRating, color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
             }
 
-            // Bottom-Left: Type & Year (Mock)
+            // Bottom-Left: Type & Year
             Surface(
                 modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
                 color = Color.Black.copy(0.6f),
                 shape = RoundedCornerShape(4.dp)
             ) {
-                Text("TV - 2026", color = Color.White, fontSize = 9.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                Text("${anime.type} - ${anime.year}", color = Color.White, fontSize = 9.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
             }
 
             // Bottom-Right: 3 dots
@@ -306,7 +306,7 @@ fun PremiumAnimeCard(anime: ScrapedAnime, navController: NavController) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Star, contentDescription = null, tint = StarColor, modifier = Modifier.size(14.dp))
             Text(" ${anime.score ?: 8.5}", color = TextSecondary, fontSize = 12.sp)
-            Text(" (1.3M Vote)", color = TextSecondary, fontSize = 11.sp)
+            Text(" (${anime.voteCount} Vote)", color = TextSecondary, fontSize = 11.sp)
         }
     }
 }
