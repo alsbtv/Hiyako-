@@ -1,29 +1,42 @@
 package com.ejemplo.hiyako.presentation.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
-    primary = AccentColor,
-    onPrimary = TextPrimary,
+private val BaseColorScheme = darkColorScheme(
     background = DarkBackground,
-    onBackground = TextPrimary,
-    surface = SurfaceColor,
-    onSurface = TextPrimary,
-    secondary = TextSecondary
+    surface = DarkSurface,
+    onBackground = Color.White,
+    onSurface = Color.White
 )
-
-val AppTypography = Typography()
 
 @Composable
 fun HiyakoTheme(
+    themeColor: String = "Red",
     content: @Composable () -> Unit
 ) {
+    val primaryColor = when (themeColor) {
+        "Green" -> GreenPrimary
+        "Purple" -> PurplePrimary
+        "Blue" -> BluePrimary
+        else -> RedPrimary
+    }
+    val secondaryColor = when (themeColor) {
+        "Green" -> GreenSecondary
+        "Purple" -> PurpleSecondary
+        "Blue" -> BlueSecondary
+        else -> RedSecondary
+    }
+
+    val colorScheme = BaseColorScheme.copy(
+        primary = primaryColor,
+        secondary = secondaryColor
+    )
+
     MaterialTheme(
-        colorScheme = DarkColorScheme,
-        typography = AppTypography,
+        colorScheme = colorScheme,
         content = content
     )
 }

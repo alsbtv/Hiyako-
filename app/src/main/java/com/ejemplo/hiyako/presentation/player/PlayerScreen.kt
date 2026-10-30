@@ -3,7 +3,6 @@ package com.ejemplo.hiyako.presentation.player
 import android.view.ViewGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -26,7 +25,6 @@ import androidx.navigation.NavController
 fun PlayerScreen(videoUrl: String, navController: NavController) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(videoUrl))
@@ -58,8 +56,8 @@ fun PlayerScreen(videoUrl: String, navController: NavController) {
             },
             modifier = Modifier.fillMaxSize()
         )
-        IconButton(onClick = { navController.popBackStack() }, modifier = Modifier.align(Alignment.TopStart).padding(16.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+        IconButton(onClick = { navController.popBackStack() }, modifier = Modifier.align(Alignment.TopStart).padding(16.dp).background(Color.Black.copy(alpha = 0.5f))) {
+            Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White)
         }
     }
 }

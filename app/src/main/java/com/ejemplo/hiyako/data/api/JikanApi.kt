@@ -1,46 +1,44 @@
 package com.ejemplo.hiyako.data.api
 
-import com.ejemplo.hiyako.data.model.ScrapedAnime
-import com.ejemplo.hiyako.utils.RateLimiter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import javax.inject.Inject
-import javax.inject.Singleton
-import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
+import com.ejemplo.hiyako.data.model.ScrapedAnime
 
-@Singleton
-class JikanApi @Inject constructor() {
-    private val client = OkHttpClient()
+object JikanApi {
+    private val client = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).build()
 
     suspend fun getAnimeDetails(title: String): ScrapedAnime? = withContext(Dispatchers.IO) {
-        RateLimiter.throttleJikan()
         try {
-            val encodedTitle = URLEncoder.encode(title, "UTF-8")
-            val workerUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=https://api.jikan.moe/v4/anime?q=$encodedTitle&limit=1"
+            val encodedTitle = java.net.URLEncoder.encode(title, "UTF-8")
+            val targetUrl = "https://api.jikan.moe/v4/anime?q=$encodedTitle&limit=1"
+            val workerUrl = "https://late-morning-434d.wesaamalsubhi.workers.dev/?url=$targetUrl"
+            
             val request = Request.Builder().url(workerUrl).build()
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) return@withContext null
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext null
-                val body = response.body?.string() ?: return@withContext null
-                val json = JSONObject(body)
-                val data = json.optJSONArray("data")?.optJSONObject(0) ?: return@withContext null
+            val jsonString = response.body?.string() ?: ""
+            val data = JSONObject(jsonString).optJSONArray("data") ?: return@withContext null
+            if (data.length() == 0) return@withContext null
 
-                val synopsis = data.optString("synopsis", null)
-                val score = data.optDouble("score", 0.0).let { if (it > 0) it else null }
-                val images = data.optJSONObject("images")?.optJSONObject("jpg")
-                val posterUrl = images?.optString("large_image_url", images.optString("image_url", "")) ?: ""
-
-                ScrapedAnime(
-                    title = title,
-                    url = "",
-                    posterUrl = posterUrl,
-                    synopsis = synopsis,
-                    score = score
-                )
-            }
+            val anime = data.getJSONObject(0)
+            val images = anime.optJSONObject("images")?.optJSONObject("jpg")
+            val poster = images?.optString("large_image_url") ?: images?.optString("image_url") ?: ""
+            
+            return@withContext ScrapedAnime(
+                title = anime.optString("title"),
+                url = "jikan_${anime.optInt("mal_id")}",
+                posterUrl = poster,
+                bannerUrl = poster, // Jikan doesn't provide banners, use poster
+                synopsis = anime.optString("synopsis"),
+                score = anime.optDouble("score", 0.0),
+                status = anime.optString("status"),
+                episodeNumber = anime.optInt("episodes").toString()
+            )
         } catch (e: Exception) {
             null
         }
