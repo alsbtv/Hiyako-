@@ -8,8 +8,11 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class NewsRepository {
+@Singleton
+class NewsRepository @Inject constructor() {
     private val client = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).build()
 
     suspend fun fetchNews(): List<NewsArticle> = withContext(Dispatchers.IO) {
