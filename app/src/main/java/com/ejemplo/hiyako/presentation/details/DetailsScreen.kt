@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -85,7 +86,7 @@ fun DetailsScreen(animeUrl: String, navController: NavController) {
                 HeaderSection(title)
             }
             item {
-                ActionButtonsRow()
+                ActionButtonsRow(navController)
                 Spacer(modifier = Modifier.height(16.dp))
                 TabsRow(tabs, selectedTab) { selectedTab = it }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -107,7 +108,7 @@ fun DetailsScreen(animeUrl: String, navController: NavController) {
                 }
             } else if (selectedTab == 1) {
                 items(10) { index ->
-                    EpisodeItem(index + 1)
+                    EpisodeItem(index + 1, navController)
                 }
             }
             item { Spacer(modifier = Modifier.height(100.dp)) } // Bottom padding
@@ -197,14 +198,14 @@ fun HeaderSection(title: String) {
 }
 
 @Composable
-fun ActionButtonsRow() {
+fun ActionButtonsRow(navController) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Button(
-            onClick = { },
+            onClick = { navController.navigate("player/https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8") },
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50046)),
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.weight(1f).height(45.dp)
@@ -393,7 +394,7 @@ fun RelatedAnimesSection() {
 }
 
 @Composable
-fun EpisodeItem(index: Int) {
+fun EpisodeItem(index: Int, navController: NavController) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).background(Color(0xFF1E1E1E), RoundedCornerShape(8.dp)).padding(8.dp),
         verticalAlignment = Alignment.CenterVertically

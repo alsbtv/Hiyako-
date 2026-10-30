@@ -50,6 +50,8 @@ android {
 
 
 dependencies {
+    implementation("androidx.media3:media3-exoplayer:1.2.1")
+    implementation("androidx.media3:media3-ui:1.2.1")
     // Jetpack Compose (Material 3 BOM)
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
