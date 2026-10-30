@@ -24,6 +24,8 @@ class HomeViewModel @Inject constructor(
     private val anilistApi: AniListApi
 ) : ViewModel() {
 
+    private var isDataLoaded = false
+
     private val _uiState = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
@@ -32,6 +34,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun fetchAnime() {
+        if (isDataLoaded) return
         viewModelScope.launch {
             try {
                 val scrapedList = scraper.getLatestAnime()
@@ -56,6 +59,7 @@ class HomeViewModel @Inject constructor(
                 }
 
                 _uiState.value = HomeUiState.Success(enrichedList)
+                isDataLoaded = true
             } catch (e: Exception) {
                 _uiState.value = HomeUiState.Error(e.message ?: "Unknown error")
             }
