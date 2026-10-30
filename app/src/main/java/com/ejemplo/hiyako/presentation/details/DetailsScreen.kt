@@ -17,19 +17,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -38,7 +37,6 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun DetailsScreen(animeUrl: String, navController: NavController) {
-    // Dummy data for exact UI replication
     val title = "Bleach: Sennen Kessen-hen - Kashin-tan"
     val altTitle = "Bleach: Thousand-year Blood War - The Calamity"
     val nativeTitle = "BLEACH 千年血戦篇-禍進譚-"
@@ -51,7 +49,6 @@ fun DetailsScreen(animeUrl: String, navController: NavController) {
     var currentBgIndex by remember { mutableStateOf(0) }
     val clipboardManager = LocalClipboardManager.current
 
-    // Background changing every 7 seconds
     LaunchedEffect(Unit) {
         while (true) {
             delay(7000)
@@ -63,7 +60,6 @@ fun DetailsScreen(animeUrl: String, navController: NavController) {
     val tabs = listOf("Details", "Episodes", "Watch History", "Favorite Episodes", "Gallery", "More Like This")
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F1115))) {
-        // 1. Blurred Changing Background
         Crossfade(targetState = images[currentBgIndex], animationSpec = tween(2000), label = "bg") { image ->
             AsyncImage(
                 model = image,
@@ -72,14 +68,12 @@ fun DetailsScreen(animeUrl: String, navController: NavController) {
                 modifier = Modifier.fillMaxWidth().height(500.dp).blur(30.dp).alpha(0.6f)
             )
         }
-        // Gradient overlay to darken bottom
         Box(
             modifier = Modifier.fillMaxWidth().height(500.dp).background(
                 Brush.verticalGradient(listOf(Color.Transparent, Color(0xFF0F1115)))
             )
         )
 
-        // 2. Main Content
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             item {
                 TopBar(navController)
@@ -92,7 +86,6 @@ fun DetailsScreen(animeUrl: String, navController: NavController) {
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Tab Content
             if (selectedTab == 0) {
                 item {
                     WarningBanner()
@@ -111,7 +104,7 @@ fun DetailsScreen(animeUrl: String, navController: NavController) {
                     EpisodeItem(index + 1, navController)
                 }
             }
-            item { Spacer(modifier = Modifier.height(100.dp)) } // Bottom padding
+            item { Spacer(modifier = Modifier.height(100.dp)) }
         }
     }
 }
@@ -127,10 +120,10 @@ fun TopBar(navController: NavController) {
             Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(onClick = { navController.navigate("player/https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8") }, modifier = Modifier.background(Color(0x80000000), CircleShape)) {
+            IconButton(onClick = { }, modifier = Modifier.background(Color(0x80000000), CircleShape)) {
                 Icon(Icons.Default.FavoriteBorder, contentDescription = "Favorite", tint = Color.White)
             }
-            IconButton(onClick = { navController.navigate("player/https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8") }, modifier = Modifier.background(Color(0x80000000), CircleShape)) {
+            IconButton(onClick = { }, modifier = Modifier.background(Color(0x80000000), CircleShape)) {
                 Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White)
             }
         }
@@ -140,7 +133,6 @@ fun TopBar(navController: NavController) {
 @Composable
 fun HeaderSection(title: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-        // Poster
         Box {
             AsyncImage(
                 model = "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx116674-2P4wLh56yH2W.jpg",
@@ -155,7 +147,6 @@ fun HeaderSection(title: String) {
             }
         }
         Spacer(modifier = Modifier.width(16.dp))
-        // Info
         Column(modifier = Modifier.weight(1f)) {
             Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 2)
             Spacer(modifier = Modifier.height(8.dp))
@@ -176,7 +167,6 @@ fun HeaderSection(title: String) {
                 Text("Completed", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(8.dp))
-            // Ratings
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Column {
                     Box(modifier = Modifier.background(Color(0xFF2E51A2), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
@@ -198,7 +188,7 @@ fun HeaderSection(title: String) {
 }
 
 @Composable
-fun ActionButtonsRow(navController) {
+fun ActionButtonsRow(navController: NavController) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -251,13 +241,13 @@ fun WarningBanner() {
     ) {
         Text(
             "This anime may contain sexual, violence, or mature scenes that are not suitable for children or family viewing. Viewer discretion is advised.",
-            color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
         )
     }
 }
 
 @Composable
-fun InfoSection(title: String, altTitle: String, nativeTitle: String, story: String, clipboard: androidx.compose.ui.platform.ClipboardManager) {
+fun InfoSection(title: String, altTitle: String, nativeTitle: String, story: String, clipboard: ClipboardManager) {
     Column(modifier = Modifier.padding(16.dp)) {
         InfoItem("Title", title, clipboard)
         InfoItem("Alternative Title", altTitle, clipboard)
@@ -270,7 +260,7 @@ fun InfoSection(title: String, altTitle: String, nativeTitle: String, story: Str
 }
 
 @Composable
-fun InfoItem(label: String, value: String, clipboard: androidx.compose.ui.platform.ClipboardManager) {
+fun InfoItem(label: String, value: String, clipboard: ClipboardManager) {
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Text(
@@ -290,7 +280,7 @@ fun GenresSection() {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(listOf("Action", "Adventure", "Shounen", "Supernatural")) { genre ->
                 Box(
-                    modifier = Modifier.background(Color(0xFF1E1E1E), RoundedCornerShape(8.dp)).clickable { /* TODO: Navigate to genre */ }.padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = Modifier.background(Color(0xFF1E1E1E), RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Text(genre, color = Color.White)
                 }
@@ -325,7 +315,6 @@ fun StatisticsSection() {
                 StatItem(Icons.Default.Close, "Dropped: 617 (0.33%)", Color(0xFFE50046))
                 StatItem(Icons.Default.Bookmark, "Plan To Watch: 77K (40.79%)", Color(0xFF00BCD4))
             }
-            // Simple Donut Chart representation
             Box(modifier = Modifier.size(100.dp), contentAlignment = Alignment.Center) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     drawArc(color = Color(0xFF00BCD4), startAngle = 0f, sweepAngle = 150f, useCenter = false, style = Stroke(width = 30f))
