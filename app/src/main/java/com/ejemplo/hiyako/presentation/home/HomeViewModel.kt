@@ -37,13 +37,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 scraperManager.getAnimeFromSources().collectLatest { batch ->
-                    // Enrich the batch with 50 sources (represented by MetadataAggregator)
-                    val enrichedBatch = batch.take(3).mapNotNull { anime ->
-                        val details = metadataAggregator.getEnrichedAnime(anime.title)
-                        details ?: anime
-                    } + batch.drop(3)
-
-                    allAnime.addAll(enrichedBatch)
+                    allAnime.addAll(batch)
                     _uiState.value = HomeUiState.Success(allAnime.toList())
                 }
             } catch (e: Exception) {

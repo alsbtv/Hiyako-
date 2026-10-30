@@ -25,11 +25,11 @@ fun SplashScreen(navController: NavController) {
 
     LaunchedEffect(key1 = true) {
         startAnimation = true
-        delay(2000)
+        delay(1500)
         navController.navigate("home") { popUpTo("splash") { inclusive = true } }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0B131D)), contentAlignment = Alignment.Center) {
-        Text(text = "Hiyako", color = Color(0xFFE91E63), fontSize = 48.sp, fontWeight = FontWeight.Bold, modifier = Modifier.alpha(alphaAnim.value).scale(scaleAnim.value))
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F1115)), contentAlignment = Alignment.Center) {
+        Text(text = "Hiyako", color = Color(0xFFE50046), fontSize = 48.sp, fontWeight = FontWeight.Bold, modifier = Modifier.alpha(alphaAnim.value).scale(scaleAnim.value))
     }
 }

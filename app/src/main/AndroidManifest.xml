@@ -7,7 +7,7 @@
     <application
         android:name=".HiyakoApplication"
         android:allowBackup="true"
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:icon="@drawable/ic_launcher_custom"
         android:label="Hiyako"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar"
