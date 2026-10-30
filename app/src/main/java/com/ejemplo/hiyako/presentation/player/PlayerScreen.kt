@@ -11,7 +11,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -26,8 +25,8 @@ import androidx.navigation.NavController
 @Composable
 fun PlayerScreen(videoUrl: String, navController: NavController) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     
-    // Initialize ExoPlayer
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(videoUrl))
@@ -36,15 +35,10 @@ fun PlayerScreen(videoUrl: String, navController: NavController) {
         }
     }
 
-    // Manage Lifecycle to pause/resume
-    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE -> exoPlayer.pause()
-                Lifecycle.Event.ON_RESUME -> exoPlayer.play()
-                else -> {}
-            }
+            if (event == Lifecycle.Event.ON_PAUSE) exoPlayer.pause()
+            if (event == Lifecycle.Event.ON_RESUME) exoPlayer.play()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
@@ -54,29 +48,17 @@ fun PlayerScreen(videoUrl: String, navController: NavController) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // Video View
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     player = exoPlayer
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     useController = true
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
-
-        // Back Button Overlay
-        IconButton(
-            onClick = { navController.popBackStack() },
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(16.dp)
-                .background(Color(0x80000000), CircleShape)
-        ) {
+        IconButton(onClick = { navController.popBackStack() }, modifier = Modifier.align(Alignment.TopStart).padding(16.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)) {
             Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
         }
     }
