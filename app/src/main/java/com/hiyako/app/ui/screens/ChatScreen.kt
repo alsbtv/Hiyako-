@@ -1,7 +1,11 @@
 package com.hiyako.app.ui.screens
 
 import android.annotation.SuppressLint
+import android.app.Dialog
+import android.os.Message
+import android.view.WindowManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
@@ -25,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.webkit.WebViewAssetLoader
 import com.hiyako.app.ui.components.ChatInputBar
 import com.hiyako.app.ui.components.MessageBubble
 import com.hiyako.app.ui.theme.*
@@ -138,7 +141,6 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                     }
                 }
 
-                // المحرك المخفي / شاشة تسجيل الدخول
                 AndroidView(
                     factory = { ctx -> WebView(ctx).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -147,36 +149,44 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                         settings.javaScriptCanOpenWindowsAutomatically = true
                         settings.setSupportMultipleWindows(true)
                         
-                        // منع فتح الروابط في المتصفح الخارجي
                         webViewClient = object : WebViewClient() {
-                            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                                // إبقاء جميع الروابط داخل WebView
-                                view?.loadUrl(url ?: return false)
-                                return true
-                            }
-                            override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
-                                view?.loadUrl(request?.url.toString())
-                                return true
+                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                return false // تحميل الرابط داخل WebView
                             }
                         }
                         
-                        // التعامل مع النوافذ المنبثقة (إن وُجدت)
                         webChromeClient = object : WebChromeClient() {
-                            override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
-                                val newWebView = WebView(view!!.context)
-                                newWebView.settings.javaScriptEnabled = true
-                                newWebView.webViewClient = object : WebViewClient() {
-                                    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                                        view?.loadUrl(url ?: return false)
-                                        return true
+                            override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
+                                val context = view?.context ?: return false
+                                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                                
+                                val popupWebView = WebView(context).apply {
+                                    settings.javaScriptEnabled = true
+                                    settings.domStorageEnabled = true
+                                    settings.javaScriptCanOpenWindowsAutomatically = true
+                                    settings.setSupportMultipleWindows(true)
+                                    
+                                    webViewClient = object : WebViewClient() {
+                                        override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
+                                            return false // تحميل الرابط داخل النافذة المنبثقة
+                                        }
+                                    }
+                                    
+                                    webChromeClient = object : WebChromeClient() {
+                                        override fun onCloseWindow(window: WebView?) {
+                                            window?.destroy()
+                                        }
                                     }
                                 }
-                                val dialog = android.app.Dialog(view!!.context)
-                                dialog.setContentView(newWebView)
-                                dialog.setOnDismissListener { newWebView.destroy() }
-                                dialog.show()
-                                val transport = resultMsg?.obj as WebView.WebViewTransport
-                                transport.webView = newWebView
+                                
+                                val dialog = Dialog(context).apply {
+                                    setContentView(popupWebView)
+                                    window?.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+                                    setOnDismissListener { popupWebView.destroy() }
+                                    show()
+                                }
+                                
+                                transport.webView = popupWebView
                                 resultMsg.sendToTarget()
                                 return true
                             }
@@ -227,22 +237,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                             </script></body></html>
                         """.trimIndent()
                         
-                        val assetLoader = WebViewAssetLoader.Builder()
-                            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(ctx))
-                            .build()
-                        webViewClient = object : WebViewClient() {
-                            override fun shouldInterceptRequest(view: WebView?, request: android.webkit.WebResourceRequest?): android.webkit.WebResourceResponse? {
-                                return request?.url?.let { assetLoader.shouldInterceptRequest(it) }
-                            }
-                        }
-                        
-                        loadDataWithBaseURL(
-                            "https://appassets.androidplatform.net",
-                            html,
-                            "text/html",
-                            "UTF-8",
-                            null
-                        )
+                        loadDataWithBaseURL("https://appassets.androidplatform.net", html, "text/html", "UTF-8", null)
                         webView = this
                     }}, 
                     modifier = if (showLoginView) Modifier.fillMaxSize() else Modifier.size(1.dp).alpha(0f)
