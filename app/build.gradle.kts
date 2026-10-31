@@ -94,3 +94,7 @@ dependencies {
     implementation("org.jsoup:jsoup:1.17.2")
 
 }
+dependencies {
+    implementation("androidx.media3:media3-exoplayer:1.2.1")
+    implementation("androidx.media3:media3-ui:1.2.1")
+}
