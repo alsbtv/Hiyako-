@@ -1,7 +1,6 @@
 package com.hiyako.app.ui.screens
 
 import android.annotation.SuppressLint
-import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -47,14 +46,12 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var showModelSheet by remember { mutableStateOf(false) }
     var searchModelQuery by remember { mutableStateOf("") }
-    
-    // حالة إظهار شاشة تسجيل الدخول
     var showLoginView by remember { mutableStateOf(false) }
 
     LaunchedEffect(isLoggedIn) {
         if (isLoggedIn) {
             showLoginView = false
-            vm.resetLogin() // لإعادة تعيين الحالة
+            vm.resetLogin()
         }
     }
 
@@ -79,14 +76,14 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                     Spacer(Modifier.height(24.dp))
                     Row(Modifier.fillMaxWidth().clickable { scope.launch { drawerState.close() } }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Add, null, tint = TextPrimary)
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(Modifier.width(12.dp))
                         Text("New Chat", color = TextPrimary, fontSize = 16.sp)
                     }
                     Spacer(Modifier.weight(1f))
                     Divider(color = CardDark)
                     Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(32.dp).background(TextSecondary, CircleShape), contentAlignment = Alignment.Center) { Text("W", color = Color.Black) }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(Modifier.width(12.dp))
                         Text("بسام هرار", color = TextPrimary, modifier = Modifier.weight(1f))
                         Icon(Icons.Default.MoreVert, null, tint = TextPrimary)
                     }
@@ -127,7 +124,6 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 
-                // واجهة الشات العادية (تختفي عند فتح تسجيل الدخول)
                 if (!showLoginView) {
                     if (messages.isEmpty()) {
                         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -142,7 +138,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                     }
                 }
 
-                // المحرك المخفي/المرئي
+                // المحرك المخفي / شاشة تسجيل الدخول
                 AndroidView(
                     factory = { ctx -> WebView(ctx).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -151,13 +147,33 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                         settings.javaScriptCanOpenWindowsAutomatically = true
                         settings.setSupportMultipleWindows(true)
                         
-                        // دعم النوافذ المنبثقة
+                        // منع فتح الروابط في المتصفح الخارجي
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                                // إبقاء جميع الروابط داخل WebView
+                                view?.loadUrl(url ?: return false)
+                                return true
+                            }
+                            override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                                view?.loadUrl(request?.url.toString())
+                                return true
+                            }
+                        }
+                        
+                        // التعامل مع النوافذ المنبثقة (إن وُجدت)
                         webChromeClient = object : WebChromeClient() {
                             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
-                                val newWebView = WebView(view!!.context)
+                                val newWebView = WebView(view?.context)
                                 newWebView.settings.javaScriptEnabled = true
+                                newWebView.webViewClient = object : WebViewClient() {
+                                    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                                        view?.loadUrl(url ?: return false)
+                                        return true
+                                    }
+                                }
                                 val dialog = android.app.Dialog(view?.context!!)
                                 dialog.setContentView(newWebView)
+                                dialog.setOnDismissListener { newWebView.destroy() }
                                 dialog.show()
                                 val transport = resultMsg?.obj as WebView.WebViewTransport
                                 transport.webView = newWebView
@@ -232,7 +248,6 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                     modifier = if (showLoginView) Modifier.fillMaxSize() else Modifier.size(1.dp).alpha(0f)
                 )
 
-                // زر إغلاق شاشة تسجيل الدخول
                 if (showLoginView) {
                     IconButton(
                         onClick = { showLoginView = false },
