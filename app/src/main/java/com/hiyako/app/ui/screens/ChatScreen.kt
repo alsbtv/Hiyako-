@@ -183,7 +183,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                             .build()
                         webViewClient = object : WebViewClient() {
                             override fun shouldInterceptRequest(view: WebView?, request: android.webkit.WebResourceRequest?): android.webkit.WebResourceResponse? {
-                                return assetLoader.shouldInterceptRequest(request?.url)
+                                return request?.url?.let { assetLoader.shouldInterceptRequest(it) }
                             }
                         }
                         
