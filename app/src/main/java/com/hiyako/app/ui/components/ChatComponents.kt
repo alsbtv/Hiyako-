@@ -7,12 +7,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -27,7 +26,9 @@ import com.hiyako.app.ui.theme.TextSecondary
 fun MessageBubble(
     text: String,
     isUser: Boolean,
-    isLoading: Boolean = false
+    isLoading: Boolean = false,
+    hasCodeChanges: Boolean = false,
+    onApplyChanges: (String) -> Unit = {}
 ) {
     val arrangement = if (isUser) Arrangement.End else Arrangement.Start
     Row(
@@ -60,6 +61,21 @@ fun MessageBubble(
                     } else {
                         Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyLarge)
                     }
+                }
+            }
+            
+            // زر تطبيق التعديلات (يظهر فقط إذا كان هناك كود)
+            if (hasCodeChanges && !isUser) {
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = { onApplyChanges(text) },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Icon(Icons.Default.Build, null, modifier = Modifier.size(16.dp), tint = Color.White)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Apply & Build", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
