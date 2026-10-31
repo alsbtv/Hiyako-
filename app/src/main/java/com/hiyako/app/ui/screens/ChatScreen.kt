@@ -163,7 +163,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                         // التعامل مع النوافذ المنبثقة (إن وُجدت)
                         webChromeClient = object : WebChromeClient() {
                             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
-                                val newWebView = WebView(view?.context)
+                                val newWebView = WebView(view!!.context)
                                 newWebView.settings.javaScriptEnabled = true
                                 newWebView.webViewClient = object : WebViewClient() {
                                     override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
@@ -171,7 +171,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                                         return true
                                     }
                                 }
-                                val dialog = android.app.Dialog(view?.context!!)
+                                val dialog = android.app.Dialog(view!!.context)
                                 dialog.setContentView(newWebView)
                                 dialog.setOnDismissListener { newWebView.destroy() }
                                 dialog.show()
