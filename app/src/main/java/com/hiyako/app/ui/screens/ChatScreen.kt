@@ -1,7 +1,9 @@
 package com.hiyako.app.ui.screens
 
 import android.annotation.SuppressLint
+import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -86,7 +88,9 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                 Row(Modifier.fillMaxWidth().padding(top = 24.dp, start = 16.dp, end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, null, tint = TextPrimary) }
                     Row {
-                        IconButton(onClick = { }) { Icon(Icons.Default.VolumeOff, null, tint = TextPrimary) }
+                        IconButton(onClick = { webView?.evaluateJavascript("window.startSignIn();", null) }) {
+                            Icon(Icons.Default.AccountCircle, null, tint = TextPrimary)
+                        }
                         IconButton(onClick = { }) { Icon(Icons.Default.AddCircleOutline, null, tint = TextPrimary) }
                     }
                 }
@@ -114,11 +118,19 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                     }
                 }
 
-                // المحرك المخفي (إصلاح جذري لاستخراج النص)
                 AndroidView(
                     factory = { ctx -> WebView(ctx).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
                         settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.javaScriptCanOpenWindowsAutomatically = true
+                        settings.setSupportMultipleWindows(true)
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onJsAlert(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
+                                result?.confirm(); return true
+                            }
+                        }
+                        webViewClient = WebViewClient()
                         addJavascriptInterface(AiBridge(vm), "AndroidBridge")
                         val html = """
                             <html><head><script src='https://js.puter.com/v2/'></script></head><body>
@@ -131,6 +143,14 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                                             window.fetchModels();
                                         } 
                                     }, 500);
+                                };
+                                window.startSignIn = function() {
+                                    puter.auth.signIn().then(() => {
+                                        AndroidBridge.onResponse('Signed in successfully');
+                                        window.fetchModels();
+                                    }).catch(e => {
+                                        AndroidBridge.onResponse('Sign in error: ' + JSON.stringify(e));
+                                    });
                                 };
                                 window.fetchModels = function() {
                                     puter.ai.listModels().then(models => {
@@ -152,7 +172,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                                             } else if (r && r.result && r.result.message && r.result.message.content) {
                                                 text = r.result.message.content;
                                             } else {
-                                                text = JSON.stringify(r); // إذا لم نجد النص، نعرض الكائن كاملاً لنعرف السبب
+                                                text = JSON.stringify(r);
                                             }
                                             AndroidBridge.onResponse(text);
                                         })
