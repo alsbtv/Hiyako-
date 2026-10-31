@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.webkit.WebViewAssetLoader
 import com.hiyako.app.ui.components.ChatInputBar
 import com.hiyako.app.ui.components.MessageBubble
 import com.hiyako.app.ui.theme.*
@@ -132,6 +133,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                         }
                         webViewClient = WebViewClient()
                         addJavascriptInterface(AiBridge(vm), "AndroidBridge")
+                        
                         val html = """
                             <html><head><script src='https://js.puter.com/v2/'></script></head><body>
                             <script>
@@ -161,28 +163,38 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                                 window.askPuter = function(p, m) {
                                     let opts = { stream: false };
                                     if (m && m !== "") opts.model = m;
-                                    
                                     puter.ai.chat(p, opts)
                                         .then(r => {
                                             let text = "";
-                                            if (typeof r === 'string') {
-                                                text = r;
-                                            } else if (r && r.message && r.message.content) {
-                                                text = r.message.content;
-                                            } else if (r && r.result && r.result.message && r.result.message.content) {
-                                                text = r.result.message.content;
-                                            } else {
-                                                text = JSON.stringify(r);
-                                            }
+                                            if (typeof r === 'string') text = r;
+                                            else if (r && r.message && r.message.content) text = r.message.content;
+                                            else if (r && r.result && r.result.message && r.result.message.content) text = r.result.message.content;
+                                            else text = JSON.stringify(r);
                                             AndroidBridge.onResponse(text);
                                         })
-                                        .catch(e => {
-                                            AndroidBridge.onResponse('JS Error: ' + JSON.stringify(e));
-                                        });
+                                        .catch(e => AndroidBridge.onResponse('JS Error: ' + JSON.stringify(e)));
                                 };
                             </script></body></html>
                         """.trimIndent()
-                        loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                        
+                        // تحميل الصفحة من أصل حقيقي باستخدام WebViewAssetLoader
+                        val assetLoader = WebViewAssetLoader.Builder()
+                            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(ctx))
+                            .build()
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldInterceptRequest(view: WebView?, request: android.webkit.WebResourceRequest?): android.webkit.WebResourceResponse? {
+                                return assetLoader.shouldInterceptRequest(request?.url)
+                            }
+                        }
+                        
+                        // استخدام loadDataWithBaseURL مع baseUrl حقيقي
+                        loadDataWithBaseURL(
+                            "https://appassets.androidplatform.net",
+                            html,
+                            "text/html",
+                            "UTF-8",
+                            null
+                        )
                         webView = this
                     }}, modifier = Modifier.size(1.dp).alpha(0f)
                 )
