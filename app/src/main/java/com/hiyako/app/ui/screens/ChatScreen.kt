@@ -114,6 +114,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                     }
                 }
 
+                // المحرك المخفي (إصلاح جذري لاستخراج النص)
                 AndroidView(
                     factory = { ctx -> WebView(ctx).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -138,16 +139,26 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                                     }).catch(e => AndroidBridge.onModelsReceived("[]"));
                                 };
                                 window.askPuter = function(p, m) {
-                                    let opts = m ? { model: m } : {};
+                                    let opts = { stream: false };
+                                    if (m && m !== "") opts.model = m;
+                                    
                                     puter.ai.chat(p, opts)
                                         .then(r => {
                                             let text = "";
-                                            if (r && r.message && r.message.content) text = r.message.content;
-                                            else if (r && r.result && r.result.message && r.result.message.content) text = r.result.message.content;
-                                            else text = r.toString();
+                                            if (typeof r === 'string') {
+                                                text = r;
+                                            } else if (r && r.message && r.message.content) {
+                                                text = r.message.content;
+                                            } else if (r && r.result && r.result.message && r.result.message.content) {
+                                                text = r.result.message.content;
+                                            } else {
+                                                text = JSON.stringify(r); // إذا لم نجد النص، نعرض الكائن كاملاً لنعرف السبب
+                                            }
                                             AndroidBridge.onResponse(text);
                                         })
-                                        .catch(e => AndroidBridge.onResponse('Error: ' + e));
+                                        .catch(e => {
+                                            AndroidBridge.onResponse('JS Error: ' + JSON.stringify(e));
+                                        });
                                 };
                             </script></body></html>
                         """.trimIndent()
