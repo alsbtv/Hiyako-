@@ -1,4 +1,5 @@
 package com.hiyako.app.ui.screens
+
 import android.webkit.JavascriptInterface
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,26 +11,46 @@ data class AiModel(val name: String, val id: String)
 class AiViewModel : ViewModel() {
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages = _messages.asStateFlow()
+    
     private val _isReady = MutableStateFlow(false)
     
     private val _selectedModel = MutableStateFlow(AiModel("Default (Auto)", ""))
     val selectedModel = _selectedModel.asStateFlow()
 
-    val availableModels = listOf(
-        AiModel("GPT-4o", "gpt-4o"),
-        AiModel("Claude 3.5 Sonnet", "claude-3-5-sonnet"),
-        AiModel("Gemini 1.5 Pro", "google/gemini-1.5-pro"),
-        AiModel("Llama 3 70B", "meta-llama/llama-3-70b-instruct"),
-        AiModel("DeepSeek V3", "deepseek-chat"),
-        AiModel("Mistral Large", "mistralai/mistral-large")
-    )
-    private val _filteredModels = MutableStateFlow(availableModels)
+    // البداية بنموذج افتراضي فقط، وبعدها يتم جلب الكل
+    private val _availableModels = MutableStateFlow<List<AiModel>>(listOf(AiModel("Loading models...", "")))
+    val availableModels = _availableModels.asStateFlow()
+    
+    private val _filteredModels = MutableStateFlow<List<AiModel>>(emptyList())
     val filteredModels = _filteredModels.asStateFlow()
 
     fun setReady() { _isReady.value = true }
     fun selectModel(model: AiModel) { _selectedModel.value = model }
+    
+    fun onModelsReceived(jsonString: String) {
+        try {
+            val jsonArray = org.json.JSONArray(jsonString)
+            val modelsList = mutableListOf<AiModel>()
+            modelsList.add(AiModel("Default (Auto)", ""))
+            
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val id = obj.optString("id")
+                val name = obj.optString("name", id)
+                if (id.isNotBlank()) {
+                    modelsList.add(AiModel(name, id))
+                }
+            }
+            _availableModels.value = modelsList.sortedBy { it.name }
+            _filteredModels.value = _availableModels.value
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _availableModels.value = listOf(AiModel("Error loading models", ""))
+        }
+    }
+
     fun filterModels(query: String) {
-        _filteredModels.value = if (query.isBlank()) availableModels else availableModels.filter { it.name.contains(query, ignoreCase = true) }
+        _filteredModels.value = if (query.isBlank()) _availableModels.value else _availableModels.value.filter { it.name.contains(query, ignoreCase = true) }
     }
 
     fun sendMessage(text: String, webView: android.webkit.WebView?) {
@@ -51,4 +72,5 @@ class AiViewModel : ViewModel() {
 class AiBridge(private val vm: AiViewModel) {
     @JavascriptInterface fun onReady() { vm.setReady() }
     @JavascriptInterface fun onResponse(res: String) { vm.onResponse(res) }
+    @JavascriptInterface fun onModelsReceived(json: String) { vm.onModelsReceived(json) }
 }
