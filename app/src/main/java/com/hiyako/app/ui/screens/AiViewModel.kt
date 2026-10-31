@@ -70,7 +70,3 @@ class AiBridge(private val vm: AiViewModel) {
     @JavascriptInterface fun onImage(res: String) { vm.onImage(res) }
     @JavascriptInterface fun onVideo(res: String) { vm.onVideo(res) }
 }
-// Extension to get context for ExoPlayer
-fun AiViewModel.getApplication(): android.content.Context {
-    return androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.getInstance(androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application).create(AiViewModel::class.java).let { androidx.compose.ui.platform.LocalContext.current }
-}

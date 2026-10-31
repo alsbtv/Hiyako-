@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +36,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(vm: AiViewModel = viewModel()) {
+    val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
@@ -138,7 +140,8 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                                         if (msg.type == "IMAGE") {
                                             AsyncImage(model = msg.content, contentDescription = null, modifier = Modifier.size(200.dp), contentScale = ContentScale.Crop)
                                         } else if (msg.type == "VIDEO") {
-                                            val exoPlayer = remember { ExoPlayer.Builder(vm.getApplication()).build().apply { setMediaItem(MediaItem.fromUri(msg.content)); prepare(); playWhenReady = true } }
+                                            val exoPlayer = remember { ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(msg.content)); prepare(); playWhenReady = true } }
+                                            DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
                                             AndroidView(factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer } }, modifier = Modifier.size(250.dp, 150.dp))
                                         } else {
                                             Text(msg.content, color = if (msg.isUser) Color.Black else TextPrimary)
