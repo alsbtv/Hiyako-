@@ -154,7 +154,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                         // دعم النوافذ المنبثقة
                         webChromeClient = object : WebChromeClient() {
                             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
-                                val newWebView = WebView(view?.context)
+                                val newWebView = WebView(view!!.context)
                                 newWebView.settings.javaScriptEnabled = true
                                 val dialog = android.app.Dialog(view?.context!!)
                                 dialog.setContentView(newWebView)
