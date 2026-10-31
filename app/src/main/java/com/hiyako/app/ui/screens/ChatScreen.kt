@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,24 +37,18 @@ fun ChatScreen(
     onNavigateToWorkspace: () -> Unit = {},
     vm: AiViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
     var input by remember { mutableStateOf("") }
     val messages by vm.messages.collectAsState()
     val selectedModel by vm.selectedModel.collectAsState()
     val filteredModels by vm.filteredModels.collectAsState()
+    val isBuilding by vm.isBuilding.collectAsState()
     
     var webView by remember { mutableStateOf<WebView?>(null) }
     var showModelSheet by remember { mutableStateOf(false) }
     var searchModelQuery by remember { mutableStateOf("") }
-
-    // حالة لمعرفة ما إذا كان هناك مشروع مفتوح
-    var currentRepo by remember { mutableStateOf(WorkspaceManager.activeRepo) }
-
-    LaunchedEffect(Unit) {
-        currentRepo = WorkspaceManager.activeRepo
-    }
 
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) {
@@ -65,30 +60,30 @@ fun ChatScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = OledBlack, modifier = Modifier.width(300.dp)) {
+            ModalDrawerSheet(drawerContainerColor = OledBlack, modifier = Modifier.width(280.dp)) {
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
                     OutlinedTextField(
-                        value = "", onValueChange = {}, placeholder = { Text("Search chat content...", color = TextSecondary) },
-                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+                        value = "", onValueChange = {}, placeholder = { Text("Search chat content...", color = TextSecondary, fontSize = 14.sp) },
+                        modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(24.dp),
                         colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = CardDark, unfocusedBorderColor = Color.Transparent),
-                        leadingIcon = { Icon(Icons.Default.Search, null, tint = TextSecondary) }
+                        leadingIcon = { Icon(Icons.Default.Search, null, tint = TextSecondary, modifier = Modifier.size(20.dp)) }
                     )
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(16.dp))
                     Row(Modifier.fillMaxWidth().clickable { 
                         scope.launch { drawerState.close() }
                         onNavigateToWorkspace() 
                     }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Folder, null, tint = AccentBlue)
+                        Icon(Icons.Default.Folder, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(12.dp))
-                        Text("Workspace (GitHub)", color = AccentBlue, fontSize = 16.sp)
+                        Text("Workspace (GitHub)", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                     Spacer(Modifier.weight(1f))
                     Divider(color = CardDark)
                     Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(32.dp).background(TextSecondary, CircleShape), contentAlignment = Alignment.Center) { Text("W", color = Color.Black) }
+                        Box(Modifier.size(32.dp).background(TextSecondary, CircleShape), contentAlignment = Alignment.Center) { Text("W", color = Color.Black, fontSize = 14.sp) }
                         Spacer(Modifier.width(12.dp))
-                        Text("بسام هرار", color = TextPrimary, modifier = Modifier.weight(1f))
-                        Icon(Icons.Default.MoreVert, null, tint = TextPrimary)
+                        Text("بسام هرار", color = TextPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.MoreVert, null, tint = TextPrimary, modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -99,27 +94,44 @@ fun ChatScreen(
             modifier = Modifier.imePadding().fillMaxSize(),
             topBar = {
                 Column {
-                    Row(Modifier.fillMaxWidth().padding(top = 24.dp, start = 16.dp, end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, null, tint = TextPrimary) }
-                        Text("Nexus AI", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { }) { Icon(Icons.Default.AddCircleOutline, null, tint = TextPrimary) }
+                    // شريط علوي أنحف
+                    Row(Modifier.fillMaxWidth().padding(top = 16.dp, start = 12.dp, end = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { 
+                            Icon(Icons.Default.Menu, null, tint = TextPrimary, modifier = Modifier.size(24.dp)) 
+                        }
+                        Text("Nexus AI", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { }, modifier = Modifier.size(36.dp)) { 
+                            Icon(Icons.Default.AddCircleOutline, null, tint = TextPrimary, modifier = Modifier.size(24.dp)) 
+                        }
                     }
-                    // شارة المشروع النشط
-                    if (WorkspaceManager.isLoaded) {
+                    
+                    // شريط حالة المشروع أو البناء
+                    if (isBuilding) {
                         Row(Modifier.fillMaxWidth().background(CardDark).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Folder, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
+                            CircularProgressIndicator(color = AccentBlue, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
-                            Text("Active Project: ${WorkspaceManager.activeRepo} (${WorkspaceManager.projectFiles.size} files)", color = AccentBlue, fontSize = 12.sp)
+                            Text("Uploading changes to GitHub...", color = AccentBlue, fontSize = 12.sp)
+                        }
+                    } else if (WorkspaceManager.isLoaded) {
+                        Row(Modifier.fillMaxWidth().background(CardDark).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Folder, null, tint = AccentBlue, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Active: ${WorkspaceManager.activeRepo}", color = AccentBlue, fontSize = 12.sp)
                         }
                     }
                 }
             },
             bottomBar = {
-                Column(Modifier.padding(bottom = 8.dp)) {
+                Column(Modifier.padding(bottom = 4.dp)) {
                     ChatInputBar(input = input, onInputChange = { input = it }, onSend = { vm.sendMessage(input, webView); input = "" }, isLoading = false)
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.padding(horizontal = 16.dp)) {
-                        AssistChip(onClick = { showModelSheet = true }, label = { Text(selectedModel.name, color = AccentBlue) }, leadingIcon = { Icon(Icons.Default.Language, null, tint = AccentBlue, modifier = Modifier.size(16.dp)) })
+                    Spacer(Modifier.height(4.dp))
+                    Row(Modifier.padding(horizontal = 12.dp)) {
+                        AssistChip(
+                            onClick = { showModelSheet = true }, 
+                            label = { Text(selectedModel.name, color = AccentBlue, fontSize = 12.sp) }, 
+                            leadingIcon = { Icon(Icons.Default.Language, null, tint = AccentBlue, modifier = Modifier.size(14.dp)) },
+                            modifier = Modifier.height(28.dp)
+                        )
                     }
                 }
             }
@@ -127,20 +139,30 @@ fun ChatScreen(
             Box(Modifier.padding(padding).fillMaxSize()) {
                 if (messages.isEmpty()) {
                     Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Hi! What's on your mind today?", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("Hi! What's on your mind today?", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         if (WorkspaceManager.isLoaded) {
-                            Spacer(Modifier.height(8.dp))
-                            Text("Ready to code on ${WorkspaceManager.activeRepo}", color = AccentBlue, fontSize = 14.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Ready to code on ${WorkspaceManager.activeRepo}", color = AccentBlue, fontSize = 13.sp)
                         }
                     }
                 } else {
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp)) {
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 4.dp)) {
                         items(messages) { msg ->
-                            MessageBubble(text = msg.content, isUser = msg.isUser, isLoading = msg.isLoading, hasCodeChanges = msg.hasCodeChanges, onApplyChanges = { response -> val token = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE).getString("github_token", "") ?: ""; vm.applyChanges(token, response, context) })
+                            MessageBubble(
+                                text = msg.content, 
+                                isUser = msg.isUser, 
+                                isLoading = msg.isLoading, 
+                                hasCodeChanges = msg.hasCodeChanges, 
+                                onApplyChanges = { response -> 
+                                    val token = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE).getString("github_token", "") ?: ""
+                                    vm.applyChanges(token, response, context) 
+                                }
+                            )
                         }
                     }
                 }
 
+                // المحرك المخفي
                 AndroidView(
                     factory = { ctx -> WebView(ctx).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -178,11 +200,19 @@ fun ChatScreen(
                 if (showModelSheet) {
                     ModalBottomSheet(onDismissRequest = { showModelSheet = false }, containerColor = CardDark) {
                         Column(Modifier.padding(16.dp).fillMaxHeight(0.8f)) {
-                            Text("Select Model (500+ Available)", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                            OutlinedTextField(value = searchModelQuery, onValueChange = { searchModelQuery = it; vm.filterModels(it) }, placeholder = { Text("Search models...", color = TextSecondary) }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+                            Text("Select Model (500+)", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            OutlinedTextField(
+                                value = searchModelQuery, 
+                                onValueChange = { searchModelQuery = it; vm.filterModels(it) }, 
+                                placeholder = { Text("Search models...", color = TextSecondary, fontSize = 14.sp) }, 
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            )
                             LazyColumn {
                                 items(filteredModels) { model ->
-                                    Row(Modifier.fillMaxWidth().clickable { vm.selectModel(model); showModelSheet = false }.padding(16.dp)) { Text(model.name, color = TextPrimary) }
+                                    Row(Modifier.fillMaxWidth().clickable { vm.selectModel(model); showModelSheet = false }.padding(vertical = 12.dp, horizontal = 4.dp)) { 
+                                        Text(model.name, color = TextPrimary, fontSize = 15.sp) 
+                                    }
                                 }
                             }
                         }

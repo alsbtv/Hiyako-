@@ -61,7 +61,10 @@ class AiViewModel : ViewModel() {
             fullPrompt += "You are an expert Android Developer. You are modifying the project '${WorkspaceManager.activeRepo}'.\n"
             fullPrompt += "I will provide you with the current code. You must reply with the FULL modified code of any file you change.\n"
             fullPrompt += "CRITICAL INSTRUCTION: You must format your output EXACTLY like this for EACH file you modify:\n"
-            fullPrompt += "[FILE: path/to/filename.kt]\n```kotlin\n<FULL FILE CODE HERE>\n```\n\n"
+            fullPrompt += "[FILE: path/to/filename.kt]\n"
+            fullPrompt += "```kotlin\n"
+            fullPrompt += "<FULL FILE CODE HERE>\n"
+            fullPrompt += "```\n\n"
             fullPrompt += "Here are the current files:\n"
             WorkspaceManager.projectFiles.forEach { (path, content) ->
                 fullPrompt += "--- File: $path ---\n$content\n\n"
@@ -81,7 +84,6 @@ class AiViewModel : ViewModel() {
         _messages.value = _messages.value.filter { !it.isLoading } + Message(res, false, hasCodeChanges = hasChanges)
     }
 
-    // دالة استخراج الكود من الرد ورفعه
     fun applyChanges(token: String, aiResponse: String, context: Context) {
         if (WorkspaceManager.activeRepo.isBlank()) return
         _isBuilding.value = true

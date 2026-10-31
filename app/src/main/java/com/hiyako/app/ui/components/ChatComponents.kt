@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hiyako.app.ui.theme.AccentBlue
@@ -31,19 +33,22 @@ fun MessageBubble(
     onApplyChanges: (String) -> Unit = {}
 ) {
     val arrangement = if (isUser) Arrangement.End else Arrangement.Start
+    // إزالة علامات ** التي تظهر كنص
+    val cleanText = text.replace("**", "").replace("```", "").trim()
+
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = arrangement,
         verticalAlignment = Alignment.Top
     ) {
         if (!isUser) {
-            Box(Modifier.size(28.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
-                Text("N", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Box(Modifier.size(24.dp).background(AccentBlue, CircleShape).padding(top = 2.dp), contentAlignment = Alignment.Center) {
+                Text("N", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(8.dp))
         }
         Column(
-            modifier = Modifier.widthIn(max = 300.dp),
+            modifier = Modifier.weight(1f, fill = false),
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
             Surface(
@@ -55,26 +60,33 @@ fun MessageBubble(
                     bottomEnd = 16.dp
                 )
             ) {
-                Box(Modifier.padding(12.dp)) {
+                Box(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     if (isLoading) {
-                        CircularProgressIndicator(color = AccentBlue, modifier = Modifier.size(20.dp))
+                        CircularProgressIndicator(color = AccentBlue, modifier = Modifier.size(18.dp))
                     } else {
-                        Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = cleanText,
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp,
+                            textAlign = if (isUser) TextAlign.End else TextAlign.Start,
+                            style = TextStyle(textDirection = TextDirection.Content)
+                        )
                     }
                 }
             }
             
-            // زر تطبيق التعديلات (يظهر فقط إذا كان هناك كود)
             if (hasCodeChanges && !isUser) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 Button(
                     onClick = { onApplyChanges(text) },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(36.dp)
+                    modifier = Modifier.height(32.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
                 ) {
-                    Icon(Icons.Default.Build, null, modifier = Modifier.size(16.dp), tint = Color.White)
-                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Default.Build, null, modifier = Modifier.size(14.dp), tint = Color.White)
+                    Spacer(Modifier.width(6.dp))
                     Text("Apply & Build", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
@@ -91,18 +103,19 @@ fun ChatInputBar(
 ) {
     Surface(tonalElevation = 2.dp, color = CardDark) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             BasicTextField(
                 value = input,
                 onValueChange = onInputChange,
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                textStyle = TextStyle(color = TextPrimary, fontSize = 16.sp),
+                textStyle = TextStyle(color = TextPrimary, fontSize = 15.sp, textDirection = TextDirection.Content),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(AccentBlue),
+                maxLines = 4,
                 decorationBox = { innerTextField ->
                     Box {
-                        if (input.isEmpty()) Text("Type a message...", color = TextSecondary)
+                        if (input.isEmpty()) Text("Type a message...", color = TextSecondary, fontSize = 15.sp)
                         innerTextField()
                     }
                 }
@@ -110,9 +123,10 @@ fun ChatInputBar(
             FilledIconButton(
                 onClick = onSend,
                 enabled = input.isNotBlank() && !isLoading,
-                colors = IconButtonDefaults.filledIconButtonColors(containerColor = if (input.isNotBlank()) AccentBlue else Color.DarkGray)
+                modifier = Modifier.size(40.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = if (input.isNotBlank()) AccentBlue else Color.Transparent)
             ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = if (input.isNotBlank()) Color.White else TextSecondary, modifier = Modifier.size(20.dp))
             }
         }
     }
