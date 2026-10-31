@@ -1,6 +1,7 @@
 package com.hiyako.app.ui.screens
 
 import android.annotation.SuppressLint
+import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -41,10 +42,21 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
     val messages by vm.messages.collectAsState()
     val selectedModel by vm.selectedModel.collectAsState()
     val filteredModels by vm.filteredModels.collectAsState()
+    val isLoggedIn by vm.isLoggedIn.collectAsState()
     
     var webView by remember { mutableStateOf<WebView?>(null) }
     var showModelSheet by remember { mutableStateOf(false) }
     var searchModelQuery by remember { mutableStateOf("") }
+    
+    // حالة إظهار شاشة تسجيل الدخول
+    var showLoginView by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn) {
+            showLoginView = false
+            vm.resetLogin() // لإعادة تعيين الحالة
+        }
+    }
 
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) {
@@ -67,14 +79,14 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                     Spacer(Modifier.height(24.dp))
                     Row(Modifier.fillMaxWidth().clickable { scope.launch { drawerState.close() } }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Add, null, tint = TextPrimary)
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text("New Chat", color = TextPrimary, fontSize = 16.sp)
                     }
                     Spacer(Modifier.weight(1f))
                     Divider(color = CardDark)
                     Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(32.dp).background(TextSecondary, CircleShape), contentAlignment = Alignment.Center) { Text("W", color = Color.Black) }
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text("بسام هرار", color = TextPrimary, modifier = Modifier.weight(1f))
                         Icon(Icons.Default.MoreVert, null, tint = TextPrimary)
                     }
@@ -86,39 +98,51 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
             containerColor = OledBlack,
             modifier = Modifier.imePadding().fillMaxSize(),
             topBar = {
-                Row(Modifier.fillMaxWidth().padding(top = 24.dp, start = 16.dp, end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, null, tint = TextPrimary) }
-                    Row {
-                        IconButton(onClick = { webView?.evaluateJavascript("window.startSignIn();", null) }) {
-                            Icon(Icons.Default.AccountCircle, null, tint = TextPrimary)
+                if (!showLoginView) {
+                    Row(Modifier.fillMaxWidth().padding(top = 24.dp, start = 16.dp, end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, null, tint = TextPrimary) }
+                        Row {
+                            IconButton(onClick = { 
+                                showLoginView = true 
+                                webView?.evaluateJavascript("window.startSignIn();", null)
+                            }) {
+                                Icon(Icons.Default.AccountCircle, null, tint = TextPrimary)
+                            }
+                            IconButton(onClick = { }) { Icon(Icons.Default.AddCircleOutline, null, tint = TextPrimary) }
                         }
-                        IconButton(onClick = { }) { Icon(Icons.Default.AddCircleOutline, null, tint = TextPrimary) }
                     }
                 }
             },
             bottomBar = {
-                Column(Modifier.padding(bottom = 8.dp)) {
-                    ChatInputBar(input = input, onInputChange = { input = it }, onSend = { vm.sendMessage(input, webView); input = "" }, isLoading = false)
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.padding(horizontal = 16.dp)) {
-                        AssistChip(onClick = { showModelSheet = true }, label = { Text(selectedModel.name, color = AccentBlue) }, leadingIcon = { Icon(Icons.Default.Language, null, tint = AccentBlue, modifier = Modifier.size(16.dp)) })
+                if (!showLoginView) {
+                    Column(Modifier.padding(bottom = 8.dp)) {
+                        ChatInputBar(input = input, onInputChange = { input = it }, onSend = { vm.sendMessage(input, webView); input = "" }, isLoading = false)
+                        Spacer(Modifier.height(8.dp))
+                        Row(Modifier.padding(horizontal = 16.dp)) {
+                            AssistChip(onClick = { showModelSheet = true }, label = { Text(selectedModel.name, color = AccentBlue) }, leadingIcon = { Icon(Icons.Default.Language, null, tint = AccentBlue, modifier = Modifier.size(16.dp)) })
+                        }
                     }
                 }
             }
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
-                if (messages.isEmpty()) {
-                    Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Hi! What's on your mind today?", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    }
-                } else {
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp)) {
-                        items(messages) { msg ->
-                            MessageBubble(text = msg.content, isUser = msg.isUser, isLoading = msg.isLoading)
+                
+                // واجهة الشات العادية (تختفي عند فتح تسجيل الدخول)
+                if (!showLoginView) {
+                    if (messages.isEmpty()) {
+                        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Hi! What's on your mind today?", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp)) {
+                            items(messages) { msg ->
+                                MessageBubble(text = msg.content, isUser = msg.isUser, isLoading = msg.isLoading)
+                            }
                         }
                     }
                 }
 
+                // المحرك المخفي/المرئي
                 AndroidView(
                     factory = { ctx -> WebView(ctx).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -126,16 +150,26 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                         settings.domStorageEnabled = true
                         settings.javaScriptCanOpenWindowsAutomatically = true
                         settings.setSupportMultipleWindows(true)
+                        
+                        // دعم النوافذ المنبثقة
                         webChromeClient = object : WebChromeClient() {
-                            override fun onJsAlert(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
-                                result?.confirm(); return true
+                            override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
+                                val newWebView = WebView(view?.context)
+                                newWebView.settings.javaScriptEnabled = true
+                                val dialog = android.app.Dialog(view?.context!!)
+                                dialog.setContentView(newWebView)
+                                dialog.show()
+                                val transport = resultMsg?.obj as WebView.WebViewTransport
+                                transport.webView = newWebView
+                                resultMsg.sendToTarget()
+                                return true
                             }
                         }
-                        webViewClient = WebViewClient()
+                        
                         addJavascriptInterface(AiBridge(vm), "AndroidBridge")
                         
                         val html = """
-                            <html><head><script src='https://js.puter.com/v2/'></script></head><body>
+                            <html><head><script src='https://js.puter.com/v2/'></script></head><body style="background: #0F0F0F; color: white;">
                             <script>
                                 window.onload = function() {
                                     let check = setInterval(() => { 
@@ -148,7 +182,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                                 };
                                 window.startSignIn = function() {
                                     puter.auth.signIn().then(() => {
-                                        AndroidBridge.onResponse('Signed in successfully');
+                                        AndroidBridge.onLoginSuccess();
                                         window.fetchModels();
                                     }).catch(e => {
                                         AndroidBridge.onResponse('Sign in error: ' + JSON.stringify(e));
@@ -177,7 +211,6 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                             </script></body></html>
                         """.trimIndent()
                         
-                        // تحميل الصفحة من أصل حقيقي باستخدام WebViewAssetLoader
                         val assetLoader = WebViewAssetLoader.Builder()
                             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(ctx))
                             .build()
@@ -187,7 +220,6 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                             }
                         }
                         
-                        // استخدام loadDataWithBaseURL مع baseUrl حقيقي
                         loadDataWithBaseURL(
                             "https://appassets.androidplatform.net",
                             html,
@@ -196,8 +228,19 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                             null
                         )
                         webView = this
-                    }}, modifier = Modifier.size(1.dp).alpha(0f)
+                    }}, 
+                    modifier = if (showLoginView) Modifier.fillMaxSize() else Modifier.size(1.dp).alpha(0f)
                 )
+
+                // زر إغلاق شاشة تسجيل الدخول
+                if (showLoginView) {
+                    IconButton(
+                        onClick = { showLoginView = false },
+                        modifier = Modifier.align(Alignment.TopEnd).padding(32.dp).background(CardDark, CircleShape)
+                    ) {
+                        Icon(Icons.Default.Close, null, tint = Color.White)
+                    }
+                }
 
                 if (showModelSheet) {
                     ModalBottomSheet(onDismissRequest = { showModelSheet = false }, containerColor = CardDark) {

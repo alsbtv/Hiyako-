@@ -12,6 +12,8 @@ class AiViewModel : ViewModel() {
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages = _messages.asStateFlow()
     private val _isReady = MutableStateFlow(false)
+    private val _isLoggedIn = MutableStateFlow(false)
+    val isLoggedIn = _isLoggedIn.asStateFlow()
     
     private val _selectedModel = MutableStateFlow(AiModel("Default (Auto)", ""))
     val selectedModel = _selectedModel.asStateFlow()
@@ -22,6 +24,9 @@ class AiViewModel : ViewModel() {
     val filteredModels = _filteredModels.asStateFlow()
 
     fun setReady() { _isReady.value = true }
+    fun onLoginSuccess() { _isLoggedIn.value = true }
+    fun resetLogin() { _isLoggedIn.value = false }
+    
     fun selectModel(model: AiModel) { _selectedModel.value = model }
     
     fun onModelsReceived(jsonString: String) {
@@ -62,4 +67,5 @@ class AiBridge(private val vm: AiViewModel) {
     @JavascriptInterface fun onReady() { vm.setReady() }
     @JavascriptInterface fun onResponse(res: String) { vm.onResponse(res) }
     @JavascriptInterface fun onModelsReceived(json: String) { vm.onModelsReceived(json) }
+    @JavascriptInterface fun onLoginSuccess() { vm.onLoginSuccess() }
 }
