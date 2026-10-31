@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Nexus AI" android:supportsRtl="true" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="true">
-        <activity android:name=".MainActivity" android:exported="true" android:theme="@android:style/Theme.Material.NoActionBar">
+    <application android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Nexus AI" android:supportsRtl="true" android:theme="@android:style/Theme.Material.NoActionBar" android:windowSoftInputMode="adjustResize" android:usesCleartextTraffic="true">
+        <activity android:name=".MainActivity" android:exported="true" android:theme="@android:style/Theme.Material.NoActionBar" android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

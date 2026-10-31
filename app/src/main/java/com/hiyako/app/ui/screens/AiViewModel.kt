@@ -11,16 +11,13 @@ data class AiModel(val name: String, val id: String)
 class AiViewModel : ViewModel() {
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages = _messages.asStateFlow()
-    
     private val _isReady = MutableStateFlow(false)
     
     private val _selectedModel = MutableStateFlow(AiModel("Default (Auto)", ""))
     val selectedModel = _selectedModel.asStateFlow()
 
-    // البداية بنموذج افتراضي فقط، وبعدها يتم جلب الكل
     private val _availableModels = MutableStateFlow<List<AiModel>>(listOf(AiModel("Loading models...", "")))
     val availableModels = _availableModels.asStateFlow()
-    
     private val _filteredModels = MutableStateFlow<List<AiModel>>(emptyList())
     val filteredModels = _filteredModels.asStateFlow()
 
@@ -32,21 +29,15 @@ class AiViewModel : ViewModel() {
             val jsonArray = org.json.JSONArray(jsonString)
             val modelsList = mutableListOf<AiModel>()
             modelsList.add(AiModel("Default (Auto)", ""))
-            
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
                 val id = obj.optString("id")
                 val name = obj.optString("name", id)
-                if (id.isNotBlank()) {
-                    modelsList.add(AiModel(name, id))
-                }
+                if (id.isNotBlank()) modelsList.add(AiModel(name, id))
             }
             _availableModels.value = modelsList.sortedBy { it.name }
             _filteredModels.value = _availableModels.value
-        } catch (e: Exception) {
-            e.printStackTrace()
-            _availableModels.value = listOf(AiModel("Error loading models", ""))
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     fun filterModels(query: String) {
@@ -57,10 +48,8 @@ class AiViewModel : ViewModel() {
         if (text.isBlank() || !_isReady.value) return
         _messages.value = _messages.value + Message(text, true)
         _messages.value = _messages.value + Message("", false, true)
-        
         val safeText = text.replace("\"", "\\\"").replace("\n", "\\n")
-        val modelId = _selectedModel.value.id
-        val js = "window.askPuter(\"$safeText\", \"$modelId\");"
+        val js = "window.askPuter(\"$safeText\", \"${_selectedModel.value.id}\");"
         webView?.evaluateJavascript(js, null)
     }
 

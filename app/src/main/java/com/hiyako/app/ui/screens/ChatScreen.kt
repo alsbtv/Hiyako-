@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +43,13 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
     var showModelSheet by remember { mutableStateOf(false) }
     var searchModelQuery by remember { mutableStateOf("") }
 
+    val listState = rememberLazyListState()
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -73,6 +81,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
     ) {
         Scaffold(
             containerColor = OledBlack,
+            modifier = Modifier.imePadding().fillMaxSize(),
             topBar = {
                 Row(Modifier.fillMaxWidth().padding(top = 24.dp, start = 16.dp, end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, null, tint = TextPrimary) }
@@ -98,7 +107,7 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                         Text("Hi! What's on your mind today?", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     }
                 } else {
-                    LazyColumn(Modifier.fillMaxSize().padding(vertical = 8.dp)) {
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 8.dp)) {
                         items(messages) { msg ->
                             MessageBubble(text = msg.content, isUser = msg.isUser, isLoading = msg.isLoading)
                         }
@@ -132,10 +141,13 @@ fun ChatScreen(vm: AiViewModel = viewModel()) {
                                     let opts = m ? { model: m } : {};
                                     puter.ai.chat(p, opts)
                                         .then(r => {
-                                            let text = r.message ? r.message.content : r.toString();
+                                            let text = "";
+                                            if (r && r.message && r.message.content) text = r.message.content;
+                                            else if (r && r.result && r.result.message && r.result.message.content) text = r.result.message.content;
+                                            else text = r.toString();
                                             AndroidBridge.onResponse(text);
                                         })
-                                        .catch(e => AndroidBridge.onResponse('Error: '+e));
+                                        .catch(e => AndroidBridge.onResponse('Error: ' + e));
                                 };
                             </script></body></html>
                         """.trimIndent()
