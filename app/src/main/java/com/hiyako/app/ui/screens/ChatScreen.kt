@@ -85,6 +85,14 @@ fun ChatScreen(
                         Spacer(Modifier.width(12.dp))
                         Text("Workspace (GitHub)", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
+                    Row(Modifier.fillMaxWidth().clickable { 
+                        scope.launch { drawerState.close() }
+                        onNavigateToUpdater() 
+                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Update, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("Update App", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    }
                     
                     // زر تسجيل الدخول في القائمة الجانبية أيضاً
                     Row(Modifier.fillMaxWidth().clickable { 

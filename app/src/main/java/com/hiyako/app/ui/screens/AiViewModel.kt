@@ -81,7 +81,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(text: String, webView: android.webkit.WebView?) {
         if (text.isBlank() || !_isReady.value) return
         
-        // تعيين عنوان الشات بناءً على أول رسالة
         if (_messages.value.isEmpty() || _messages.value.size == 1) {
             _chatTitle.value = text.take(25) + if (text.length > 25) "..." else ""
         }
@@ -91,17 +90,20 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...")) 
         }
 
-        // بناء السياق بطريقة أذكى (نرسل هيكل الملفات فقط لتخفيف الحمل إذا كان المشروع كبير)
         var fullPrompt = ""
         if (WorkspaceManager.isLoaded) {
             fullPrompt += "You are an expert Android Developer modifying '${WorkspaceManager.activeRepo}'.\n"
-            fullPrompt += "Reply with FULL modified code of any file you change using this format:\n[FILE: path/to/filename.kt]\n```kotlin\n<CODE>\n```\n"
+            fullPrompt += "Here are the FULL contents of the files in the project:\n\n"
             
-            // إرسال مسارات الملفات فقط كمرجع، وتفاصيل الملفات المطلوبة فقط لتقليل الحمل
-            fullPrompt += "The project contains the following files:\n"
-            WorkspaceManager.projectFiles.keys.forEach { path -> fullPrompt += "- $path\n" }
-            fullPrompt += "\nIf you need to see the content of a specific file to make the changes, ask me first. Otherwise, assume standard implementations.\n"
+            // إرسال المحتوى الكامل لكل الملفات
+            WorkspaceManager.projectFiles.forEach { (path, content) ->
+                fullPrompt += "--- START FILE: $path ---\n"
+                fullPrompt += "$content\n"
+                fullPrompt += "--- END FILE: $path ---\n\n"
+            }
+            
             fullPrompt += "User Request: $text\n"
+            fullPrompt += "Reply with FULL modified code of any file you change using this format:\n[FILE: path/to/filename.kt]\n```kotlin\n<CODE>\n```\n"
         } else {
             fullPrompt = text
         }
@@ -113,7 +115,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onResponse(res: String) {
         viewModelScope.launch {
-            // استخراج الملفات المعدلة باستخدام Regex
             val changedFiles = mutableListOf<String>()
             val pattern = Pattern.compile("\\[FILE:\\s*(.*?)\\]")
             val matcher = pattern.matcher(res)
@@ -128,7 +129,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             chatDao.insertMessage(ChatEntity(role = "user", content = "...")) 
             chatDao.insertMessage(newMsg)
             
-            // إرسال إشعار تفصيلي
             if (hasChanges) {
                 sendNotification("Nexus AI", "Modified ${changedFiles.size} files.")
             } else {

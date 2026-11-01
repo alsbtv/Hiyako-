@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
                         }
                         else -> {
                             key(refreshChatTrigger) {
-                                ChatScreen(onNavigateToWorkspace = { screenState = "workspace" })
+                                ChatScreen(onNavigateToWorkspace = { screenState = "workspace" }, onNavigateToUpdater = { screenState = "updater" })
                             }
                         }
                     }
