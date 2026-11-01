@@ -23,7 +23,7 @@ import com.hiyako.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WorkspaceScreen(onBack: () -> Unit, onRepoSelected: () -> Unit, vm: WorkspaceViewModel = viewModel()) {
+fun WorkspaceScreen(onBack: () -> Unit, onRepoSelected: () -> Unit, onNavigateToUpdater: () -> Unit, vm: WorkspaceViewModel = viewModel()) {
     val context = LocalContext.current
     val token by vm.token.collectAsState()
     val repos by vm.repos.collectAsState()
@@ -69,7 +69,10 @@ fun WorkspaceScreen(onBack: () -> Unit, onRepoSelected: () -> Unit, vm: Workspac
                 Column {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("Your Repositories", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        TextButton(onClick = { vm.fetchRepos() }) { Text("Refresh", color = AccentBlue) }
+                        Row {
+                            TextButton(onClick = { onNavigateToUpdater() }) { Text("Update App", color = AccentBlue) }
+                            TextButton(onClick = { vm.fetchRepos() }) { Text("Refresh", color = AccentBlue) }
+                        }
                     }
                     Spacer(Modifier.height(8.dp))
                     
