@@ -45,7 +45,6 @@ class WorkspaceViewModel : ViewModel() {
         }
     }
 
-    // دالة اختيار المشروع وجلب ملفاته
     fun selectRepoAndLoadFiles(repo: Repo, onComplete: () -> Unit) {
         _isLoading.value = true
         _loadingMessage.value = "Fetching file tree..."
@@ -54,8 +53,9 @@ class WorkspaceViewModel : ViewModel() {
             val filesList = GitHubApi.getRepoFiles(_token.value, owner, repo.name, repo.defaultBranch)
             val loadedFiles = mutableMapOf<String, String>()
             
-            filesList.take(20).forEachIndexed { index, path -> // نأخذ أول 20 ملف لتجنب تخطي حدود السياق
-                _loadingMessage.value = "Loading files: ${index + 1}/${filesList.take(20).size}..."
+            // تم إزالة الحد الأقصى لقراءة كل الملفات
+            filesList.forEachIndexed { index, path -> 
+                _loadingMessage.value = "Loading files: ${index + 1}/${filesList.size}..."
                 val content = GitHubApi.getFileContent(_token.value, owner, repo.name, path)
                 if (content != null) {
                     loadedFiles[path] = content

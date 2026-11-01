@@ -1,7 +1,13 @@
 package com.hiyako.app.ui.screens
 
 import android.annotation.SuppressLint
+import android.app.Dialog
+import android.os.Message
+import android.view.WindowManager
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -49,6 +55,7 @@ fun ChatScreen(
     var webView by remember { mutableStateOf<WebView?>(null) }
     var showModelSheet by remember { mutableStateOf(false) }
     var searchModelQuery by remember { mutableStateOf("") }
+    var showLoginView by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) {
@@ -77,6 +84,18 @@ fun ChatScreen(
                         Spacer(Modifier.width(12.dp))
                         Text("Workspace (GitHub)", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
+                    
+                    // زر تسجيل الدخول في القائمة الجانبية أيضاً
+                    Row(Modifier.fillMaxWidth().clickable { 
+                        scope.launch { drawerState.close() }
+                        showLoginView = true 
+                        webView?.evaluateJavascript("window.startSignIn();", null)
+                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AccountCircle, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("Puter Account / Sign In", color = TextPrimary, fontSize = 15.sp)
+                    }
+
                     Spacer(Modifier.weight(1f))
                     Divider(color = CardDark)
                     Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -93,87 +112,139 @@ fun ChatScreen(
             containerColor = OledBlack,
             modifier = Modifier.imePadding().fillMaxSize(),
             topBar = {
-                Column {
-                    // شريط علوي أنحف
-                    Row(Modifier.fillMaxWidth().padding(top = 16.dp, start = 12.dp, end = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { 
-                            Icon(Icons.Default.Menu, null, tint = TextPrimary, modifier = Modifier.size(24.dp)) 
+                if (!showLoginView) {
+                    Column {
+                        Row(Modifier.fillMaxWidth().padding(top = 16.dp, start = 12.dp, end = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { 
+                                Icon(Icons.Default.Menu, null, tint = TextPrimary, modifier = Modifier.size(24.dp)) 
+                            }
+                            Text("Nexus AI", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            
+                            // زر تسجيل الدخول (الحساب)
+                            IconButton(onClick = { 
+                                showLoginView = true 
+                                webView?.evaluateJavascript("window.startSignIn();", null)
+                            }, modifier = Modifier.size(36.dp)) { 
+                                Icon(Icons.Default.AccountCircle, null, tint = TextPrimary, modifier = Modifier.size(24.dp)) 
+                            }
                         }
-                        Text("Nexus AI", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { }, modifier = Modifier.size(36.dp)) { 
-                            Icon(Icons.Default.AddCircleOutline, null, tint = TextPrimary, modifier = Modifier.size(24.dp)) 
-                        }
-                    }
-                    
-                    // شريط حالة المشروع أو البناء
-                    if (isBuilding) {
-                        Row(Modifier.fillMaxWidth().background(CardDark).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(color = AccentBlue, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Uploading changes to GitHub...", color = AccentBlue, fontSize = 12.sp)
-                        }
-                    } else if (WorkspaceManager.isLoaded) {
-                        Row(Modifier.fillMaxWidth().background(CardDark).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Folder, null, tint = AccentBlue, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Active: ${WorkspaceManager.activeRepo}", color = AccentBlue, fontSize = 12.sp)
+                        
+                        if (isBuilding) {
+                            Row(Modifier.fillMaxWidth().background(CardDark).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(color = AccentBlue, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Uploading changes to GitHub...", color = AccentBlue, fontSize = 12.sp)
+                            }
+                        } else if (WorkspaceManager.isLoaded) {
+                            Row(Modifier.fillMaxWidth().background(CardDark).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Folder, null, tint = AccentBlue, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Active: ${WorkspaceManager.activeRepo}", color = AccentBlue, fontSize = 12.sp)
+                            }
                         }
                     }
                 }
             },
             bottomBar = {
-                Column(Modifier.padding(bottom = 4.dp)) {
-                    ChatInputBar(input = input, onInputChange = { input = it }, onSend = { vm.sendMessage(input, webView); input = "" }, isLoading = false)
-                    Spacer(Modifier.height(4.dp))
-                    Row(Modifier.padding(horizontal = 12.dp)) {
-                        AssistChip(
-                            onClick = { showModelSheet = true }, 
-                            label = { Text(selectedModel.name, color = AccentBlue, fontSize = 12.sp) }, 
-                            leadingIcon = { Icon(Icons.Default.Language, null, tint = AccentBlue, modifier = Modifier.size(14.dp)) },
-                            modifier = Modifier.height(28.dp)
-                        )
+                if (!showLoginView) {
+                    Column(Modifier.padding(bottom = 4.dp)) {
+                        ChatInputBar(input = input, onInputChange = { input = it }, onSend = { vm.sendMessage(input, webView); input = "" }, isLoading = false)
+                        Spacer(Modifier.height(4.dp))
+                        Row(Modifier.padding(horizontal = 12.dp)) {
+                            AssistChip(
+                                onClick = { showModelSheet = true }, 
+                                label = { Text(selectedModel.name, color = AccentBlue, fontSize = 12.sp) }, 
+                                leadingIcon = { Icon(Icons.Default.Language, null, tint = AccentBlue, modifier = Modifier.size(14.dp)) },
+                                modifier = Modifier.height(28.dp)
+                            )
+                        }
                     }
                 }
             }
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
-                if (messages.isEmpty()) {
-                    Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Hi! What's on your mind today?", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        if (WorkspaceManager.isLoaded) {
-                            Spacer(Modifier.height(4.dp))
-                            Text("Ready to code on ${WorkspaceManager.activeRepo}", color = AccentBlue, fontSize = 13.sp)
+                if (!showLoginView) {
+                    if (messages.isEmpty()) {
+                        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Hi! What's on your mind today?", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            if (WorkspaceManager.isLoaded) {
+                                Spacer(Modifier.height(4.dp))
+                                Text("Ready to code on ${WorkspaceManager.activeRepo}", color = AccentBlue, fontSize = 13.sp)
+                            }
                         }
-                    }
-                } else {
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 4.dp)) {
-                        items(messages) { msg ->
-                            MessageBubble(
-                                text = msg.content, 
-                                isUser = msg.isUser, 
-                                isLoading = msg.isLoading, 
-                                hasCodeChanges = msg.hasCodeChanges, 
-                                onApplyChanges = { response -> 
-                                    val token = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE).getString("github_token", "") ?: ""
-                                    vm.applyChanges(token, response, context) 
-                                }
-                            )
+                    } else {
+                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 4.dp)) {
+                            items(messages) { msg ->
+                                MessageBubble(
+                                    text = msg.content, 
+                                    isUser = msg.isUser, 
+                                    isLoading = msg.isLoading, 
+                                    hasCodeChanges = msg.hasCodeChanges, 
+                                    onApplyChanges = { response -> 
+                                        val token = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE).getString("github_token", "") ?: ""
+                                        vm.applyChanges(token, response, context) 
+                                    }
+                                )
+                            }
                         }
                     }
                 }
 
-                // المحرك المخفي
+                // المحرك المخفي / شاشة تسجيل الدخول
                 AndroidView(
                     factory = { ctx -> WebView(ctx).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
+                        settings.javaScriptCanOpenWindowsAutomatically = true
+                        settings.setSupportMultipleWindows(true)
+                        
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                return false
+                            }
+                        }
+                        
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
+                                val context = view?.context ?: return false
+                                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                                
+                                val popupWebView = WebView(context).apply {
+                                    settings.javaScriptEnabled = true
+                                    settings.domStorageEnabled = true
+                                    webViewClient = object : WebViewClient() {
+                                        override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean { return false }
+                                    }
+                                }
+                                
+                                val dialog = Dialog(context).apply {
+                                    setContentView(popupWebView)
+                                    window?.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+                                    setOnDismissListener { popupWebView.destroy() }
+                                    show()
+                                }
+                                
+                                transport.webView = popupWebView
+                                resultMsg.sendToTarget()
+                                return true
+                            }
+                        }
+                        
                         addJavascriptInterface(AiBridge(vm), "AndroidBridge")
                         val html = """
                             <html><head><script src='https://js.puter.com/v2/'></script></head><body style="background: #0F0F0F; color: white;">
                             <script>
                                 window.onload = function() {
                                     let check = setInterval(() => { if (typeof puter !== 'undefined') { clearInterval(check); AndroidBridge.onReady(); window.fetchModels(); } }, 500);
+                                };
+                                window.startSignIn = function() {
+                                    puter.auth.signIn().then(() => {
+                                        AndroidBridge.onResponse('Signed in successfully!');
+                                        window.fetchModels();
+                                    }).catch(e => {
+                                        AndroidBridge.onResponse('Sign in error: ' + JSON.stringify(e));
+                                    });
                                 };
                                 window.fetchModels = function() {
                                     puter.ai.listModels().then(models => {
@@ -194,8 +265,19 @@ fun ChatScreen(
                         """.trimIndent()
                         loadDataWithBaseURL("https://appassets.androidplatform.net", html, "text/html", "UTF-8", null)
                         webView = this
-                    }}, modifier = Modifier.size(1.dp).alpha(0f)
+                    }}, 
+                    modifier = if (showLoginView) Modifier.fillMaxSize() else Modifier.size(1.dp).alpha(0f)
                 )
+
+                // زر إغلاق شاشة تسجيل الدخول
+                if (showLoginView) {
+                    IconButton(
+                        onClick = { showLoginView = false },
+                        modifier = Modifier.align(Alignment.TopEnd).padding(24.dp).background(CardDark, CircleShape)
+                    ) {
+                        Icon(Icons.Default.Close, null, tint = Color.White)
+                    }
+                }
 
                 if (showModelSheet) {
                     ModalBottomSheet(onDismissRequest = { showModelSheet = false }, containerColor = CardDark) {
