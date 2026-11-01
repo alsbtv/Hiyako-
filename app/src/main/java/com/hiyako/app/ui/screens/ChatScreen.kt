@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ChatScreen(
     onNavigateToWorkspace: () -> Unit = {},
+    onNavigateToUpdater: () -> Unit = {}, // تم إضافة المتغير المفقود
     vm: AiViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -77,6 +78,8 @@ fun ChatScreen(
                         leadingIcon = { Icon(Icons.Default.Search, null, tint = TextSecondary, modifier = Modifier.size(20.dp)) }
                     )
                     Spacer(Modifier.height(16.dp))
+                    
+                    // زر Workspace
                     Row(Modifier.fillMaxWidth().clickable { 
                         scope.launch { drawerState.close() }
                         onNavigateToWorkspace() 
@@ -85,6 +88,8 @@ fun ChatScreen(
                         Spacer(Modifier.width(12.dp))
                         Text("Workspace (GitHub)", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
+                    
+                    // زر التحديث (الذي كان مفقوداً)
                     Row(Modifier.fillMaxWidth().clickable { 
                         scope.launch { drawerState.close() }
                         onNavigateToUpdater() 
@@ -94,7 +99,7 @@ fun ChatScreen(
                         Text("Update App", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                     
-                    // زر تسجيل الدخول في القائمة الجانبية أيضاً
+                    // زر تسجيل الدخول
                     Row(Modifier.fillMaxWidth().clickable { 
                         scope.launch { drawerState.close() }
                         showLoginView = true 
@@ -129,7 +134,6 @@ fun ChatScreen(
                             }
                             Text(chatTitle, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             
-                            // زر تسجيل الدخول (الحساب)
                             IconButton(onClick = { 
                                 showLoginView = true 
                                 webView?.evaluateJavascript("window.startSignIn();", null)
@@ -209,9 +213,7 @@ fun ChatScreen(
                         settings.setSupportMultipleWindows(true)
                         
                         webViewClient = object : WebViewClient() {
-                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                                return false
-                            }
+                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean { return false }
                         }
                         
                         webChromeClient = object : WebChromeClient() {
@@ -278,7 +280,6 @@ fun ChatScreen(
                     modifier = if (showLoginView) Modifier.fillMaxSize() else Modifier.size(1.dp).alpha(0f)
                 )
 
-                // زر إغلاق شاشة تسجيل الدخول
                 if (showLoginView) {
                     IconButton(
                         onClick = { showLoginView = false },

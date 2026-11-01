@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             AppTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = OledBlack) {
-                    var screenState by remember { mutableStateOf("chat") } // "chat", "workspace", "updater"
+                    var screenState by remember { mutableStateOf("chat") }
                     var refreshChatTrigger by remember { mutableIntStateOf(0) }
                     
                     when (screenState) {
@@ -50,7 +50,10 @@ class MainActivity : ComponentActivity() {
                         }
                         else -> {
                             key(refreshChatTrigger) {
-                                ChatScreen(onNavigateToWorkspace = { screenState = "workspace" }, onNavigateToUpdater = { screenState = "updater" })
+                                ChatScreen(
+                                    onNavigateToWorkspace = { screenState = "workspace" },
+                                    onNavigateToUpdater = { screenState = "updater" }
+                                )
                             }
                         }
                     }
