@@ -24,9 +24,7 @@ import java.util.regex.Pattern
 data class Message(
     val content: String, 
     val isUser: Boolean, 
-    val isLoading: Boolean = false, 
-    val hasCodeChanges: Boolean = false, 
-    val changedFiles: List<String> = emptyList()
+    val isLoading: Boolean = false
 )
 data class AiModel(val name: String, val id: String)
 
@@ -55,7 +53,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             chatDao.getAllMessages().collect { entities ->
-                _messages.value = entities.map { Message(it.content, it.role == "user", hasCodeChanges = it.hasCodeChanges) }
+                _messages.value = entities.map { Message(it.content, it.role == "user") }
             }
         }
     }
@@ -88,7 +86,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             _chatTitle.value = text.take(25) + if (text.length > 25) "..." else ""
         }
 
-        // تشغيل الخدمة للعمل في الخلفية
         val intent = Intent(getApplication(), NexusService::class.java)
         ContextCompat.startForegroundService(getApplication(), intent)
 
@@ -100,6 +97,11 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         var fullPrompt = ""
         if (WorkspaceManager.isLoaded) {
             fullPrompt += "You are an expert Android Developer modifying '${WorkspaceManager.activeRepo}'.\n"
+            fullPrompt += "Before writing any code, you MUST list the actions you performed using these EXACT tags:\n"
+            fullPrompt += "[READ: path/to/file]\n"
+            fullPrompt += "[MODIFY: path/to/file]\n"
+            fullPrompt += "[ADD: path/to/newfile]\n"
+            fullPrompt += "[DELETE: path/to/oldfile]\n\n"
             fullPrompt += "Here are the FULL contents of the files in the project:\n\n"
             
             WorkspaceManager.projectFiles.forEach { (path, content) ->
@@ -109,7 +111,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             }
             
             fullPrompt += "User Request: $text\n"
-            fullPrompt += "Reply with FULL modified code of any file you change using this format:\n[FILE: path/to/filename.kt]\n```kotlin\n<CODE>\n```\n"
+            fullPrompt += "For any [MODIFY] or [ADD] action, provide the FULL code using this format:\n[FILE: path/to/file]\n```kotlin\n<CODE>\n```\n"
         } else {
             fullPrompt = text
         }
@@ -120,29 +122,13 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onResponse(res: String) {
-        // إيقاف الخدمة بعد انتهاء الرد
         getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
 
         viewModelScope.launch {
-            val changedFiles = mutableListOf<String>()
-            val pattern = Pattern.compile("\\[FILE:\\s*(.*?)\\]")
-            val matcher = pattern.matcher(res)
-            while (matcher.find()) {
-                matcher.group(1)?.let { changedFiles.add(it.trim()) }
-            }
-
-            val hasChanges = changedFiles.isNotEmpty()
-            val newMsg = ChatEntity(role = "ai", content = res, hasCodeChanges = hasChanges)
-            
             chatDao.clearChat()
             chatDao.insertMessage(ChatEntity(role = "user", content = "...")) 
-            chatDao.insertMessage(newMsg)
-            
-            if (hasChanges) {
-                sendNotification("Nexus AI", "Modified ${changedFiles.size} files.")
-            } else {
-                sendNotification("Nexus AI", "New response received.")
-            }
+            chatDao.insertMessage(ChatEntity(role = "ai", content = res))
+            sendNotification("Nexus AI", "New response received.")
         }
     }
 
@@ -153,21 +139,28 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         val owner = parts[0]
         val repo = parts[1]
 
-        // تشغيل الخدمة أثناء البناء والرفع
         val intent = Intent(context, NexusService::class.java)
         ContextCompat.startForegroundService(context, intent)
 
-        val pattern = Pattern.compile("\\[FILE:\\s*(.*?)\\]\\s*```[a-zA-Z]*\\n([\\s\\S]*?)```")
-        val matcher = pattern.matcher(aiResponse)
-        
+        // استخراج الكود للتعديل والإضافة
+        val filePattern = Pattern.compile("\\[FILE:\\s*(.*?)\\]\\s*```[a-zA-Z]*\\n([\\s\\S]*?)```")
+        val fileMatcher = filePattern.matcher(aiResponse)
         val filesToUpdate = mutableMapOf<String, String>()
-        while (matcher.find()) {
-            val path = matcher.group(1)?.trim() ?: continue
-            val code = matcher.group(2)?.trim() ?: continue
+        while (fileMatcher.find()) {
+            val path = fileMatcher.group(1)?.trim() ?: continue
+            val code = fileMatcher.group(2)?.trim() ?: continue
             filesToUpdate[path] = code
         }
 
-        if (filesToUpdate.isEmpty()) {
+        // استخراج الملفات المراد حذفها
+        val deletePattern = Pattern.compile("\\[DELETE:\\s*(.*?)\\]")
+        val deleteMatcher = deletePattern.matcher(aiResponse)
+        val filesToDelete = mutableListOf<String>()
+        while (deleteMatcher.find()) {
+            deleteMatcher.group(1)?.trim()?.let { filesToDelete.add(it) }
+        }
+
+        if (filesToUpdate.isEmpty() && filesToDelete.isEmpty()) {
             _isBuilding.value = false
             context.stopService(Intent(context, NexusService::class.java))
             return
@@ -176,15 +169,17 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var successCount = 0
             filesToUpdate.forEach { (path, code) ->
-                val success = GitHubApi.updateFile(token, owner, repo, path, code, "AI Auto-Update: Modified $path")
-                if (success) successCount++
+                if (GitHubApi.updateFile(token, owner, repo, path, code, "AI Auto-Update: Modified $path")) successCount++
+            }
+            filesToDelete.forEach { path ->
+                if (GitHubApi.deleteFile(token, owner, repo, path, "AI Auto-Update: Deleted $path")) successCount++
             }
             
             _isBuilding.value = false
             context.stopService(Intent(context, NexusService::class.java))
-            val successMsg = "✅ Successfully updated $successCount files on GitHub."
+            val successMsg = "✅ Successfully processed $successCount file actions on GitHub."
             chatDao.insertMessage(ChatEntity(role = "ai", content = successMsg))
-            sendNotification("Build Started", "Pushed $successCount files. GitHub Actions is building...")
+            sendNotification("Build Started", "Pushed changes. GitHub Actions is building...")
         }
     }
 

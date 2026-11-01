@@ -192,7 +192,7 @@ fun ChatScreen(
                                     text = msg.content, 
                                     isUser = msg.isUser, 
                                     isLoading = msg.isLoading, 
-                                    hasCodeChanges = msg.hasCodeChanges, 
+                                    
                                     onApplyChanges = { response -> 
                                         val token = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE).getString("github_token", "") ?: ""
                                         vm.applyChanges(token, response, context) 

@@ -7,9 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,18 +23,35 @@ import com.hiyako.app.ui.theme.AccentBlue
 import com.hiyako.app.ui.theme.CardDark
 import com.hiyako.app.ui.theme.TextPrimary
 import com.hiyako.app.ui.theme.TextSecondary
+import java.util.regex.Pattern
 
 @Composable
 fun MessageBubble(
     text: String,
     isUser: Boolean,
     isLoading: Boolean = false,
-    hasCodeChanges: Boolean = false,
-    changedFiles: List<String> = emptyList(),
     onApplyChanges: (String) -> Unit = {}
 ) {
     val arrangement = if (isUser) Arrangement.End else Arrangement.Start
     val cleanText = text.replace("**", "").replace("```", "").trim()
+
+    // استخراج الأوامر (READ, MODIFY, ADD, DELETE)
+    val actionPattern = Pattern.compile("\\[(READ|MODIFY|ADD|DELETE):\\s*(.*?)\\]")
+    val actionMatcher = actionPattern.matcher(text)
+    val actions = mutableListOf<Pair<String, String>>()
+    while (actionMatcher.find()) {
+        actionMatcher.group(1)?.let { type ->
+            actionMatcher.group(2)?.let { path ->
+                actions.add(Pair(type, path.trim()))
+            }
+        }
+    }
+
+    // إزالة الأوامر من النص المعروض لكي لا تظهر مرتين
+    var displayText = cleanText
+    actions.forEach { (type, path) ->
+        displayText = displayText.replace("[$type: $path]", "").trim()
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -65,38 +80,55 @@ fun MessageBubble(
                             Text("Thinking...", color = TextSecondary, fontSize = 14.sp)
                         }
                     } else {
-                        Text(text = cleanText, color = TextPrimary, fontSize = 15.sp, lineHeight = 22.sp, textAlign = if (isUser) TextAlign.End else TextAlign.Start, style = TextStyle(textDirection = TextDirection.Content))
+                        Text(text = displayText, color = TextPrimary, fontSize = 15.sp, lineHeight = 22.sp, textAlign = if (isUser) TextAlign.End else TextAlign.Start, style = TextStyle(textDirection = TextDirection.Content))
                     }
                 }
             }
             
-            // بطاقة الملفات المعدلة (مثل Hefesto)
-            if (hasCodeChanges && !isUser && changedFiles.isNotEmpty()) {
+            // عرض بطاقات الأوامر (مثل Hefesto)
+            if (actions.isNotEmpty() && !isUser) {
                 Spacer(Modifier.height(8.dp))
                 Column(
-                    Modifier.background(CardDark, RoundedCornerShape(8.dp))
-                        .fillMaxWidth()
-                        .padding(12.dp)
+                    Modifier.background(CardDark, RoundedCornerShape(8.dp)).fillMaxWidth().padding(12.dp)
                 ) {
-                    Text("File Changes", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("AI Actions", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
-                    changedFiles.forEach { file ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(file, color = TextPrimary, fontSize = 13.sp, maxLines = 1)
+                    actions.forEach { (type, path) ->
+                        val icon = when(type) {
+                            "READ" -> Icons.Default.Menu
+                            "MODIFY" -> Icons.Default.Edit
+                            "ADD" -> Icons.Default.Add
+                            "DELETE" -> Icons.Default.Delete
+                            else -> Icons.Default.Info
+                        }
+                        val tintColor = when(type) {
+                            "READ" -> Color(0xFF00E5FF)
+                            "MODIFY" -> Color(0xFFFFEB3B)
+                            "ADD" -> Color(0xFF4CAF50)
+                            "DELETE" -> Color(0xFFF44336)
+                            else -> Color.White
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+                            Icon(icon, null, tint = tintColor, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("$type: $path", color = TextPrimary, fontSize = 13.sp, maxLines = 1)
                         }
                     }
-                    Spacer(Modifier.height(10.dp))
-                    Button(
-                        onClick = { onApplyChanges(text) },
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().height(36.dp)
-                    ) {
-                        Icon(Icons.Default.Build, null, modifier = Modifier.size(16.dp), tint = Color.White)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Apply & Build", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    
+                    // زر التطبيق
+                    val hasCode = text.contains("[FILE:")
+                    if (hasCode) {
+                        Spacer(Modifier.height(10.dp))
+                        Button(
+                            onClick = { onApplyChanges(text) },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().height(36.dp)
+                        ) {
+                            Icon(Icons.Default.Build, null, modifier = Modifier.size(16.dp), tint = Color.White)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Apply & Build", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

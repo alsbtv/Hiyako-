@@ -70,7 +70,6 @@ object GitHubApi {
         } catch (e: Exception) { return@withContext null }
     }
 
-    // جلب SHA للملف لتحديثه
     private suspend fun getFileSha(token: String, owner: String, repo: String, path: String): String? = withContext(Dispatchers.IO) {
         try {
             val url = "https://api.github.com/repos/$owner/$repo/contents/$path"
@@ -83,7 +82,6 @@ object GitHubApi {
         return@withContext null
     }
 
-    // رفع الملف المعدل
     suspend fun updateFile(token: String, owner: String, repo: String, path: String, newContent: String, commitMessage: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val sha = getFileSha(token, owner, repo, path)
@@ -98,6 +96,26 @@ object GitHubApi {
                 .header("Authorization", "Bearer $token")
                 .header("Accept", "application/vnd.github.v3+json")
                 .put(payload.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            client.newCall(request).execute().use { response -> return@withContext response.isSuccessful }
+        } catch (e: Exception) { return@withContext false }
+    }
+
+    // دالة حذف الملفات
+    suspend fun deleteFile(token: String, owner: String, repo: String, path: String, commitMessage: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val sha = getFileSha(token, owner, repo, path) ?: return@withContext false
+            val payload = JSONObject().apply {
+                put("message", commitMessage)
+                put("sha", sha)
+            }
+            
+            val request = Request.Builder()
+                .url("https://api.github.com/repos/$owner/$repo/contents/$path")
+                .header("Authorization", "Bearer $token")
+                .header("Accept", "application/vnd.github.v3+json")
+                .delete(payload.toString().toRequestBody(jsonMediaType))
                 .build()
 
             client.newCall(request).execute().use { response -> return@withContext response.isSuccessful }
