@@ -4,11 +4,14 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.webkit.JavascriptInterface
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.hiyako.app.NexusService
 import com.hiyako.app.data.GitHubApi
 import com.hiyako.app.data.WorkspaceManager
 import com.hiyako.app.data.db.AppDatabase
@@ -85,6 +88,10 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             _chatTitle.value = text.take(25) + if (text.length > 25) "..." else ""
         }
 
+        // تشغيل الخدمة للعمل في الخلفية
+        val intent = Intent(getApplication(), NexusService::class.java)
+        ContextCompat.startForegroundService(getApplication(), intent)
+
         viewModelScope.launch {
             chatDao.insertMessage(ChatEntity(role = "user", content = text))
             chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...")) 
@@ -95,7 +102,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             fullPrompt += "You are an expert Android Developer modifying '${WorkspaceManager.activeRepo}'.\n"
             fullPrompt += "Here are the FULL contents of the files in the project:\n\n"
             
-            // إرسال المحتوى الكامل لكل الملفات
             WorkspaceManager.projectFiles.forEach { (path, content) ->
                 fullPrompt += "--- START FILE: $path ---\n"
                 fullPrompt += "$content\n"
@@ -114,6 +120,9 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onResponse(res: String) {
+        // إيقاف الخدمة بعد انتهاء الرد
+        getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
+
         viewModelScope.launch {
             val changedFiles = mutableListOf<String>()
             val pattern = Pattern.compile("\\[FILE:\\s*(.*?)\\]")
@@ -144,6 +153,10 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         val owner = parts[0]
         val repo = parts[1]
 
+        // تشغيل الخدمة أثناء البناء والرفع
+        val intent = Intent(context, NexusService::class.java)
+        ContextCompat.startForegroundService(context, intent)
+
         val pattern = Pattern.compile("\\[FILE:\\s*(.*?)\\]\\s*```[a-zA-Z]*\\n([\\s\\S]*?)```")
         val matcher = pattern.matcher(aiResponse)
         
@@ -156,6 +169,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
 
         if (filesToUpdate.isEmpty()) {
             _isBuilding.value = false
+            context.stopService(Intent(context, NexusService::class.java))
             return
         }
 
@@ -167,6 +181,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             }
             
             _isBuilding.value = false
+            context.stopService(Intent(context, NexusService::class.java))
             val successMsg = "✅ Successfully updated $successCount files on GitHub."
             chatDao.insertMessage(ChatEntity(role = "ai", content = successMsg))
             sendNotification("Build Started", "Pushed $successCount files. GitHub Actions is building...")
@@ -190,7 +205,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        notificationManager.notify(1, notification)
+        notificationManager.notify(2, notification)
     }
 }
 
