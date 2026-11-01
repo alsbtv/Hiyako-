@@ -51,6 +51,7 @@ fun ChatScreen(
     val selectedModel by vm.selectedModel.collectAsState()
     val filteredModels by vm.filteredModels.collectAsState()
     val isBuilding by vm.isBuilding.collectAsState()
+    val chatTitle by vm.chatTitle.collectAsState()
     
     var webView by remember { mutableStateOf<WebView?>(null) }
     var showModelSheet by remember { mutableStateOf(false) }
@@ -118,7 +119,7 @@ fun ChatScreen(
                             IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { 
                                 Icon(Icons.Default.Menu, null, tint = TextPrimary, modifier = Modifier.size(24.dp)) 
                             }
-                            Text("Nexus AI", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(chatTitle, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             
                             // زر تسجيل الدخول (الحساب)
                             IconButton(onClick = { 

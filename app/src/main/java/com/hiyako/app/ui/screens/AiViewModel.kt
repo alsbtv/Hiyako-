@@ -18,7 +18,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.regex.Pattern
 
-data class Message(val content: String, val isUser: Boolean, val isLoading: Boolean = false, val hasCodeChanges: Boolean = false, val changedFiles: List<String> = emptyList())
+data class Message(
+    val content: String, 
+    val isUser: Boolean, 
+    val isLoading: Boolean = false, 
+    val hasCodeChanges: Boolean = false, 
+    val changedFiles: List<String> = emptyList()
+)
 data class AiModel(val name: String, val id: String)
 
 class AiViewModel(application: Application) : AndroidViewModel(application) {
@@ -31,6 +37,9 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     
     private val _isBuilding = MutableStateFlow(false)
     val isBuilding = _isBuilding.asStateFlow()
+    
+    private val _chatTitle = MutableStateFlow("New Chat")
+    val chatTitle = _chatTitle.asStateFlow()
 
     private val _selectedModel = MutableStateFlow(AiModel("Default (Auto)", ""))
     val selectedModel = _selectedModel.asStateFlow()
@@ -41,7 +50,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     val filteredModels = _filteredModels.asStateFlow()
 
     init {
-        // تحميل الرسائل المحفوظة من قاعدة البيانات
         viewModelScope.launch {
             chatDao.getAllMessages().collect { entities ->
                 _messages.value = entities.map { Message(it.content, it.role == "user", hasCodeChanges = it.hasCodeChanges) }
@@ -73,17 +81,26 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(text: String, webView: android.webkit.WebView?) {
         if (text.isBlank() || !_isReady.value) return
         
-        viewModelScope.launch {
-            chatDao.insertMessage(ChatEntity(role = "user", content = text))
-            chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...")) // سيتم استبدالها بالرد الحقيقي
+        // تعيين عنوان الشات بناءً على أول رسالة
+        if (_messages.value.isEmpty() || _messages.value.size == 1) {
+            _chatTitle.value = text.take(25) + if (text.length > 25) "..." else ""
         }
 
+        viewModelScope.launch {
+            chatDao.insertMessage(ChatEntity(role = "user", content = text))
+            chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...")) 
+        }
+
+        // بناء السياق بطريقة أذكى (نرسل هيكل الملفات فقط لتخفيف الحمل إذا كان المشروع كبير)
         var fullPrompt = ""
         if (WorkspaceManager.isLoaded) {
             fullPrompt += "You are an expert Android Developer modifying '${WorkspaceManager.activeRepo}'.\n"
             fullPrompt += "Reply with FULL modified code of any file you change using this format:\n[FILE: path/to/filename.kt]\n```kotlin\n<CODE>\n```\n"
-            fullPrompt += "Here are the files:\n"
-            WorkspaceManager.projectFiles.forEach { (path, content) -> fullPrompt += "--- $path ---\n$content\n\n" }
+            
+            // إرسال مسارات الملفات فقط كمرجع، وتفاصيل الملفات المطلوبة فقط لتقليل الحمل
+            fullPrompt += "The project contains the following files:\n"
+            WorkspaceManager.projectFiles.keys.forEach { path -> fullPrompt += "- $path\n" }
+            fullPrompt += "\nIf you need to see the content of a specific file to make the changes, ask me first. Otherwise, assume standard implementations.\n"
             fullPrompt += "User Request: $text\n"
         } else {
             fullPrompt = text
@@ -96,7 +113,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onResponse(res: String) {
         viewModelScope.launch {
-            // استخراج الملفات المعدلة
+            // استخراج الملفات المعدلة باستخدام Regex
             val changedFiles = mutableListOf<String>()
             val pattern = Pattern.compile("\\[FILE:\\s*(.*?)\\]")
             val matcher = pattern.matcher(res)
@@ -107,13 +124,16 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             val hasChanges = changedFiles.isNotEmpty()
             val newMsg = ChatEntity(role = "ai", content = res, hasCodeChanges = hasChanges)
             
-            // حذف رسالة "التفكير" وإضافة الرد الفعلي
-            chatDao.clearChat() // مسح سريع للتبسيط (يفضل تحسينه لاحقاً)
-            chatDao.insertMessage(ChatEntity(role = "user", content = "...")) // placeholder
+            chatDao.clearChat()
+            chatDao.insertMessage(ChatEntity(role = "user", content = "...")) 
             chatDao.insertMessage(newMsg)
             
-            // إرسال إشعار إذا كان التطبيق في الخلفية
-            sendNotification("Nexus AI", "New response received from AI")
+            // إرسال إشعار تفصيلي
+            if (hasChanges) {
+                sendNotification("Nexus AI", "Modified ${changedFiles.size} files.")
+            } else {
+                sendNotification("Nexus AI", "New response received.")
+            }
         }
     }
 
@@ -149,7 +169,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             _isBuilding.value = false
             val successMsg = "✅ Successfully updated $successCount files on GitHub."
             chatDao.insertMessage(ChatEntity(role = "ai", content = successMsg))
-            sendNotification("Build Started", "Changes pushed. GitHub Actions is building...")
+            sendNotification("Build Started", "Pushed $successCount files. GitHub Actions is building...")
         }
     }
 
