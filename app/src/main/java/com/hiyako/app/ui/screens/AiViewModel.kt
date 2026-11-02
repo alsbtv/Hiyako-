@@ -57,23 +57,28 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     private val _filteredModels = MutableStateFlow<List<AiModel>>(emptyList())
     val filteredModels = _filteredModels.asStateFlow()
 
+    private var pendingMessage: String? = null
+    private var pendingWebView: android.webkit.WebView? = null
+
     init {
         viewModelScope.launch {
             try {
                 chatDao.getAllMessages().collect { entities ->
                     _messages.value = entities.map { entity ->
                         val isThinking = entity.role == "ai" && entity.content == "Thinking..."
-                        Message(
-                            content = entity.content, 
-                            isUser = entity.role == "user", 
-                            isLoading = isThinking,
-                            type = entity.messageType
-                        )
+                        Message(entity.content, entity.role == "user", isLoading = isThinking, type = entity.messageType)
                     }
                 }
             } catch (e: Exception) {
                 chatDao.clearChat()
             }
+        }
+    }
+
+    fun clearChat() {
+        viewModelScope.launch {
+            chatDao.clearChat()
+            _chatTitle.value = "New Chat"
         }
     }
 
@@ -101,6 +106,27 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(text: String, webView: android.webkit.WebView?, forceType: String? = null) {
         if (text.isBlank() || !_isReady.value) return
         
+        if (forceType != null) {
+            // If forceType is provided (e.g. from Grid), skip classification
+            executeSendMessage(text, webView, forceType)
+        } else {
+            // Ask AI to classify intent
+            pendingMessage = text
+            pendingWebView = webView
+            val js = "window.classifyIntent(\"${text.replace("\"", "\\\"")}\");"
+            webView?.evaluateJavascript(js, null)
+        }
+    }
+
+    fun onIntentClassified(type: String) {
+        val text = pendingMessage ?: return
+        val webView = pendingWebView ?: return
+        pendingMessage = null
+        pendingWebView = null
+        executeSendMessage(text, webView, type)
+    }
+
+    private fun executeSendMessage(text: String, webView: android.webkit.WebView?, type: String) {
         if (_messages.value.isEmpty() || _messages.value.size == 1) {
             _chatTitle.value = text.take(25) + if (text.length > 25) "..." else ""
         }
@@ -108,18 +134,14 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         val intent = Intent(getApplication(), NexusService::class.java)
         ContextCompat.startForegroundService(getApplication(), intent)
 
-        val isImageRequest = forceType == "IMAGE" || text.contains("image", true) || text.contains("صورة", true) || text.contains("ارسم", true)
-        val isVideoRequest = forceType == "VIDEO" || text.contains("video", true) || text.contains("فيديو", true)
-        val msgType = if (isImageRequest) "IMAGE" else if (isVideoRequest) "VIDEO" else "TEXT"
-
         viewModelScope.launch {
             chatDao.insertMessage(ChatEntity(role = "user", content = text))
-            chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...", messageType = msgType)) 
+            chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...", messageType = type)) 
         }
 
-        val js: String = when {
-            isImageRequest -> "window.generateImage(\"${text.replace("\"", "\\\"")}\");"
-            isVideoRequest -> "window.generateVideo(\"${text.replace("\"", "\\\"")}\");"
+        val js: String = when (type) {
+            "IMAGE" -> "window.generateImage(\"${text.replace("\"", "\\\"")}\");"
+            "VIDEO" -> "window.generateVideo(\"${text.replace("\"", "\\\"")}\");"
             else -> {
                 var fullPrompt = ""
                 if (WorkspaceManager.isLoaded) {
@@ -139,26 +161,87 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
                 "window.askPuter(\"${fullPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
             }
         }
-
         webView?.evaluateJavascript(js, null)
     }
 
-    // استلام الصورة: تحميلها وحفظها كملف محلي
+    // دالة فريق الوكلاء مع دعم الوكلاء المخصصين
+    fun startMultiAgent(appIdea: String, customRoles: List<String>, webView: android.webkit.WebView?) {
+        if (appIdea.isBlank() || !_isReady.value) return
+        
+        val rolesList = if (customRoles.isEmpty()) listOf("Architect", "UI Designer", "Logic Developer", "Reviewer") else customRoles
+        
+        viewModelScope.launch {
+            chatDao.insertMessage(ChatEntity(role = "user", content = "Build App: $appIdea\nAgents: ${rolesList.joinToString(", ")}"))
+            chatDao.insertMessage(ChatEntity(role = "ai", content = "Agent Team is planning...")) 
+        }
+
+        val agentsDescription = rolesList.mapIndexed { index, role -> "${index + 1}. $role" }.joinToString("\n")
+
+        val multiAgentPrompt = """
+            You are an Elite Multi-Agent Software Team. I will give you an app idea, and you must build it from scratch.
+            
+            Your specific team members and their roles are:
+            $agentsDescription
+
+            Idea: "$appIdea"
+
+            Phase 1: Each agent must contribute their part of the plan.
+            Phase 2: Write the FULL code for each file required to build this app.
+            
+            IMPORTANT: You must format the output exactly like this:
+            [FILE: path/to/file.kt]
+            ```kotlin
+            <FULL CODE>
+            ```
+            Do not skip any imports. Write clean, compilable code.
+        """.trimIndent()
+
+        val js = "window.askPuter(\"${multiAgentPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
+        webView?.evaluateJavascript(js, null)
+    }
+
+    fun startGhostMode(errorLog: String, webView: android.webkit.WebView?) {
+        if (errorLog.isBlank() || !_isReady.value) return
+        
+        viewModelScope.launch {
+            chatDao.insertMessage(ChatEntity(role = "user", content = "Fix this build error:\n$errorLog"))
+            chatDao.insertMessage(ChatEntity(role = "ai", content = "Ghost Mode is analyzing the error...")) 
+        }
+
+        val ghostPrompt = """
+            You are in Ghost Mode (Auto-Fix). The build just failed with the following error log:
+            
+            $errorLog
+            
+            Here are the current files in the project:
+            ${WorkspaceManager.projectFiles.entries.joinToString("\n\n") { "--- FILE: ${it.key} ---\n${it.value}" }}
+            
+            Your task:
+            1. Analyze the error.
+            2. Fix the code.
+            3. Output the FULL modified code using this format:
+            [FILE: path/to/file.kt]
+            ```kotlin
+            <FULL CODE>
+            ```
+        """.trimIndent()
+
+        val js = "window.askPuter(\"${ghostPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
+        webView?.evaluateJavascript(js, null)
+    }
+
     fun onImageReceived(url: String) {
         getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
         viewModelScope.launch {
             try {
                 val context = getApplication<Application>()
                 val imageFile = File(context.filesDir, "gen_${System.currentTimeMillis()}.png")
-                
                 withContext(Dispatchers.IO) {
                     if (url.startsWith("data:image")) {
-                        // فك تشفير base64 وحفظ الملف
                         val base64Data = url.substringAfter(",")
                         val imageBytes = Base64.decode(base64Data, Base64.DEFAULT)
                         imageFile.writeBytes(imageBytes)
                     } else if (url.startsWith("http")) {
-                        // تحميل من الرابط
                         val client = OkHttpClient()
                         val request = Request.Builder().url(url).build()
                         client.newCall(request).execute().use { response ->
@@ -166,23 +249,16 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
                                 response.body?.byteStream()?.use { input ->
                                     imageFile.outputStream().use { output -> input.copyTo(output) }
                                 }
-                            } else {
-                                throw Exception("Failed to download image: ${response.code}")
                             }
                         }
-                    } else {
-                        throw Exception("Invalid image URL format")
                     }
                 }
-                
                 chatDao.deleteThinkingMessage()
                 chatDao.insertMessage(ChatEntity(role = "ai", content = imageFile.absolutePath, messageType = "IMAGE"))
                 sendNotification("Nexus AI", "Image generated!")
             } catch (e: Exception) {
-                e.printStackTrace()
                 chatDao.deleteThinkingMessage()
                 chatDao.insertMessage(ChatEntity(role = "ai", content = "❌ Error: ${e.message}", messageType = "TEXT"))
-                sendNotification("Nexus AI", "Image generation failed.")
             }
         }
     }
@@ -254,72 +330,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // دالة فريق الوكلاء مع دعم الوكلاء المخصصين
-    fun startMultiAgent(appIdea: String, customRoles: List<String>, webView: android.webkit.WebView?) {
-        if (appIdea.isBlank() || !_isReady.value) return
-        
-        val rolesList = if (customRoles.isEmpty()) listOf("Architect", "UI Designer", "Logic Developer", "Reviewer") else customRoles
-        
-        viewModelScope.launch {
-            chatDao.insertMessage(ChatEntity(role = "user", content = "Build App: $appIdea\nAgents: ${rolesList.joinToString(", ")}"))
-            chatDao.insertMessage(ChatEntity(role = "ai", content = "Agent Team is planning...")) 
-        }
-
-        val agentsDescription = rolesList.mapIndexed { index, role -> "${index + 1}. $role" }.joinToString("\n")
-
-        val multiAgentPrompt = """
-            You are an Elite Multi-Agent Software Team. I will give you an app idea, and you must build it from scratch.
-            
-            Your specific team members and their roles are:
-            $agentsDescription
-
-            Idea: "$appIdea"
-
-            Phase 1: Each agent must contribute their part of the plan.
-            Phase 2: Write the FULL code for each file required to build this app.
-            
-            IMPORTANT: You must format the output exactly like this:
-            [FILE: path/to/file.kt]
-            ```kotlin
-            <FULL CODE>
-            ```
-            Do not skip any imports. Write clean, compilable code.
-        """.trimIndent()
-
-        val js = "window.askPuter(\"${multiAgentPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
-        webView?.evaluateJavascript(js, null)
-    }
-
-    fun startGhostMode(errorLog: String, webView: android.webkit.WebView?) {
-        if (errorLog.isBlank() || !_isReady.value) return
-        
-        viewModelScope.launch {
-            chatDao.insertMessage(ChatEntity(role = "user", content = "Fix this build error:\n$errorLog"))
-            chatDao.insertMessage(ChatEntity(role = "ai", content = "Ghost Mode is analyzing the error...")) 
-        }
-
-        val ghostPrompt = """
-            You are in Ghost Mode (Auto-Fix). The build just failed with the following error log:
-            
-            $errorLog
-            
-            Here are the current files in the project:
-            ${WorkspaceManager.projectFiles.entries.joinToString("\n\n") { "--- FILE: ${it.key} ---\n${it.value}" }}
-            
-            Your task:
-            1. Analyze the error.
-            2. Fix the code.
-            3. Output the FULL modified code using this format:
-            [FILE: path/to/file.kt]
-            ```kotlin
-            <FULL CODE>
-            ```
-        """.trimIndent()
-
-        val js = "window.askPuter(\"${ghostPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
-        webView?.evaluateJavascript(js, null)
-    }
-
     private fun sendNotification(title: String, message: String) {
         val context = getApplication<Application>()
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -347,4 +357,5 @@ class AiBridge(private val vm: AiViewModel) {
     @JavascriptInterface fun onImageReceived(url: String) { vm.onImageReceived(url) }
     @JavascriptInterface fun onVideoReceived(url: String) { vm.onVideoReceived(url) }
     @JavascriptInterface fun onModelsReceived(json: String) { vm.onModelsReceived(json) }
+    @JavascriptInterface fun onIntentClassified(type: String) { vm.onIntentClassified(type) }
 }
