@@ -254,6 +254,72 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // دالة فريق الوكلاء مع دعم الوكلاء المخصصين
+    fun startMultiAgent(appIdea: String, customRoles: List<String>, webView: android.webkit.WebView?) {
+        if (appIdea.isBlank() || !_isReady.value) return
+        
+        val rolesList = if (customRoles.isEmpty()) listOf("Architect", "UI Designer", "Logic Developer", "Reviewer") else customRoles
+        
+        viewModelScope.launch {
+            chatDao.insertMessage(ChatEntity(role = "user", content = "Build App: $appIdea\nAgents: ${rolesList.joinToString(", ")}"))
+            chatDao.insertMessage(ChatEntity(role = "ai", content = "Agent Team is planning...")) 
+        }
+
+        val agentsDescription = rolesList.mapIndexed { index, role -> "${index + 1}. $role" }.joinToString("\n")
+
+        val multiAgentPrompt = """
+            You are an Elite Multi-Agent Software Team. I will give you an app idea, and you must build it from scratch.
+            
+            Your specific team members and their roles are:
+            $agentsDescription
+
+            Idea: "$appIdea"
+
+            Phase 1: Each agent must contribute their part of the plan.
+            Phase 2: Write the FULL code for each file required to build this app.
+            
+            IMPORTANT: You must format the output exactly like this:
+            [FILE: path/to/file.kt]
+            ```kotlin
+            <FULL CODE>
+            ```
+            Do not skip any imports. Write clean, compilable code.
+        """.trimIndent()
+
+        val js = "window.askPuter(\"${multiAgentPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
+        webView?.evaluateJavascript(js, null)
+    }
+
+    fun startGhostMode(errorLog: String, webView: android.webkit.WebView?) {
+        if (errorLog.isBlank() || !_isReady.value) return
+        
+        viewModelScope.launch {
+            chatDao.insertMessage(ChatEntity(role = "user", content = "Fix this build error:\n$errorLog"))
+            chatDao.insertMessage(ChatEntity(role = "ai", content = "Ghost Mode is analyzing the error...")) 
+        }
+
+        val ghostPrompt = """
+            You are in Ghost Mode (Auto-Fix). The build just failed with the following error log:
+            
+            $errorLog
+            
+            Here are the current files in the project:
+            ${WorkspaceManager.projectFiles.entries.joinToString("\n\n") { "--- FILE: ${it.key} ---\n${it.value}" }}
+            
+            Your task:
+            1. Analyze the error.
+            2. Fix the code.
+            3. Output the FULL modified code using this format:
+            [FILE: path/to/file.kt]
+            ```kotlin
+            <FULL CODE>
+            ```
+        """.trimIndent()
+
+        val js = "window.askPuter(\"${ghostPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
+        webView?.evaluateJavascript(js, null)
+    }
+
     private fun sendNotification(title: String, message: String) {
         val context = getApplication<Application>()
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
