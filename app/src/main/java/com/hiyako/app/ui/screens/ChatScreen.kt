@@ -86,6 +86,17 @@ fun ChatScreen(
                     )
                     Spacer(Modifier.height(16.dp))
                     
+                    // زر مسح المحادثة الجديد
+                    Row(Modifier.fillMaxWidth().clickable { 
+                        scope.launch { drawerState.close() }
+                        vm.clearChat() 
+                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Delete, null, tint = Color.Red, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("Clear Chat History", color = Color.Red, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    }
+                    Divider(color = CardDark)
+
                     Row(Modifier.fillMaxWidth().clickable { 
                         scope.launch { drawerState.close() }
                         onNavigateToWorkspace() 
@@ -357,6 +368,18 @@ fun ChatScreen(
                                         let result = models.map(m => ({ id: m.id, name: m.name || m.id }));
                                         AndroidBridge.onModelsReceived(JSON.stringify(result));
                                     }).catch(e => AndroidBridge.onModelsReceived("[]"));
+                                };
+                                window.classifyIntent = function(p) {
+                                    let prompt = "Classify the following user request into one of these exact categories: IMAGE, VIDEO, TEXT. Output ONLY the category name. Do not add any other text or punctuation.\n\nRequest: " + p;
+                                    puter.ai.chat(prompt, {model: 'claude-3-haiku-20240307'})
+                                        .then(r => {
+                                            let res = (typeof r === 'string') ? r : (r.message ? r.message.content : (r.result ? r.result.message.content : 'TEXT'));
+                                            let clean = res.trim().toUpperCase();
+                                            if (clean.includes('IMAGE')) clean = 'IMAGE';
+                                            else if (clean.includes('VIDEO')) clean = 'VIDEO';
+                                            else clean = 'TEXT';
+                                            AndroidBridge.onIntentClassified(clean);
+                                        }).catch(e => AndroidBridge.onIntentClassified('TEXT'));
                                 };
                                 window.askPuter = function(p, m) {
                                     let opts = { stream: false };
