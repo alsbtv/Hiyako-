@@ -101,7 +101,13 @@ fun MessageBubble(
 }
 
 @Composable
-fun ChatInputBar(input: String, onInputChange: (String) -> Unit, onSend: () -> Unit, isLoading: Boolean) {
+fun ChatInputBar(
+    input: String, 
+    onInputChange: (String) -> Unit, 
+    onSend: () -> Unit, 
+    onStop: () -> Unit,
+    isLoading: Boolean
+) {
     Surface(tonalElevation = 2.dp, color = CardDark) {
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             BasicTextField(
@@ -110,8 +116,24 @@ fun ChatInputBar(input: String, onInputChange: (String) -> Unit, onSend: () -> U
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(AccentBlue), maxLines = 4,
                 decorationBox = { innerTextField -> Box { if (input.isEmpty()) Text("Type a message...", color = TextSecondary, fontSize = 15.sp); innerTextField() } }
             )
-            FilledIconButton(onClick = onSend, enabled = input.isNotBlank() && !isLoading, modifier = Modifier.size(40.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = if (input.isNotBlank()) AccentBlue else Color.Transparent)) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = if (input.isNotBlank()) Color.White else TextSecondary, modifier = Modifier.size(20.dp))
+            
+            if (isLoading) {
+                FilledIconButton(
+                    onClick = onStop, 
+                    modifier = Modifier.size(40.dp), 
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.Red)
+                ) {
+                    Icon(Icons.Default.Stop, contentDescription = "Stop", tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+            } else {
+                FilledIconButton(
+                    onClick = onSend, 
+                    enabled = input.isNotBlank(), 
+                    modifier = Modifier.size(40.dp), 
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = if (input.isNotBlank()) AccentBlue else Color.Transparent)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = if (input.isNotBlank()) Color.White else TextSecondary, modifier = Modifier.size(20.dp))
+                }
             }
         }
     }

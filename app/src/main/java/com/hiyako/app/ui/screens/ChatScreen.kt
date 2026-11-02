@@ -52,6 +52,7 @@ fun ChatScreen(
     val filteredModels by vm.filteredModels.collectAsState()
     val isBuilding by vm.isBuilding.collectAsState()
     val chatTitle by vm.chatTitle.collectAsState()
+    val isAnyLoading = messages.any { it.isLoading }
     
     var webView by remember { mutableStateOf<WebView?>(null) }
     var showModelSheet by remember { mutableStateOf(false) }
@@ -176,7 +177,7 @@ fun ChatScreen(
             bottomBar = {
                 if (!showLoginView) {
                     Column(Modifier.padding(bottom = 4.dp)) {
-                        ChatInputBar(input = input, onInputChange = { input = it }, onSend = { vm.sendMessage(input, webView, forceType); input = ""; forceType = null }, isLoading = false)
+                        ChatInputBar(input = input, onInputChange = { input = it }, onSend = { vm.sendMessage(input, webView, forceType); input = ""; forceType = null }, onStop = { vm.stopGeneration() }, isLoading = isAnyLoading)
                         Spacer(Modifier.height(4.dp))
                         Row(Modifier.padding(horizontal = 12.dp)) {
                             AssistChip(

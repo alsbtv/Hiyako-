@@ -18,7 +18,6 @@ import com.hiyako.app.data.WorkspaceManager
 import com.hiyako.app.data.db.AppDatabase
 import com.hiyako.app.data.db.ChatEntity
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -137,21 +136,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...", messageType = type)) 
         }
 
-        // مؤقت احتياطي في Kotlin (90 ثانية) لضمان عدم التعليق للأبد
-        viewModelScope.launch {
-            delay(90000)
-            if (requestId == currentRequestId) {
-                // الطلب لا يزال جارياً بعد 90 ثانية
-                chatDao.deleteThinkingMessage()
-                chatDao.insertMessage(ChatEntity(
-                    role = "ai", 
-                    content = "⏱️ Timeout: The AI took more than 90 seconds. Please try a different model or check your internet.", 
-                    messageType = "TEXT"
-                ))
-                currentRequestId++ // إلغاء الطلب
-            }
-        }
-
         val js: String = when (type) {
             "IMAGE" -> "window.generateImage(\"${text.replace("\"", "\\\"")}\");"
             "VIDEO" -> "window.generateVideo(\"${text.replace("\"", "\\\"")}\");"
@@ -175,6 +159,16 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         webView?.evaluateJavascript(js, null)
+    }
+
+
+    fun stopGeneration() {
+        currentRequestId++
+        getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
+        viewModelScope.launch {
+            chatDao.deleteThinkingMessage()
+            chatDao.insertMessage(ChatEntity(role = "ai", content = "⏹️ Generation stopped by user.", messageType = "TEXT"))
+        }
     }
 
     fun startMultiAgent(appIdea: String, customRoles: List<String>, webView: android.webkit.WebView?) {
