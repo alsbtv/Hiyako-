@@ -87,17 +87,18 @@ fun MessageBubble(
                     } else {
                         when (type) {
                             "IMAGE" -> {
-                                if (text.startsWith("http") || text.startsWith("data:image")) {
-                                    AsyncImage(
-                                        model = text,
-                                        contentDescription = "Generated Image",
-                                        modifier = Modifier.size(250.dp).background(Color.DarkGray, RoundedCornerShape(8.dp)),
-                                        contentScale = ContentScale.Crop,
-                                        onError = { /* تجاهل الخطأ */ }
-                                    )
+                                val imageModel: Any = if (text.startsWith("http") || text.startsWith("data:image")) {
+                                    text
                                 } else {
-                                    Text("❌ Failed to load image.", color = Color.Red, fontSize = 14.sp)
+                                    java.io.File(text)
                                 }
+                                AsyncImage(
+                                    model = imageModel,
+                                    contentDescription = "Generated Image",
+                                    modifier = Modifier.size(250.dp).background(Color.DarkGray, RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop,
+                                    onError = { /* تجاهل الخطأ */ }
+                                )
                             }
                             "VIDEO" -> {
                                 Text("Video generation is not supported natively yet.", color = TextPrimary, fontSize = 14.sp)

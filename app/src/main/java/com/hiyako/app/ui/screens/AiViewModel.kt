@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Base64
 import android.webkit.JavascriptInterface
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -16,9 +17,14 @@ import com.hiyako.app.data.GitHubApi
 import com.hiyako.app.data.WorkspaceManager
 import com.hiyako.app.data.db.AppDatabase
 import com.hiyako.app.data.db.ChatEntity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
 import java.util.regex.Pattern
 
 data class Message(
@@ -55,12 +61,17 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 chatDao.getAllMessages().collect { entities ->
-                    _messages.value = entities.map { 
-                        Message(it.content, it.role == "user", type = it.messageType) 
+                    _messages.value = entities.map { entity ->
+                        val isThinking = entity.role == "ai" && entity.content == "Thinking..."
+                        Message(
+                            content = entity.content, 
+                            isUser = entity.role == "user", 
+                            isLoading = isThinking,
+                            type = entity.messageType
+                        )
                     }
                 }
             } catch (e: Exception) {
-                // إذا كانت قاعدة البيانات تالفة، نقوم بمسحها لإيقاف الانهيار
                 chatDao.clearChat()
             }
         }
@@ -99,10 +110,11 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
 
         val isImageRequest = forceType == "IMAGE" || text.contains("image", true) || text.contains("صورة", true) || text.contains("ارسم", true)
         val isVideoRequest = forceType == "VIDEO" || text.contains("video", true) || text.contains("فيديو", true)
+        val msgType = if (isImageRequest) "IMAGE" else if (isVideoRequest) "VIDEO" else "TEXT"
 
         viewModelScope.launch {
             chatDao.insertMessage(ChatEntity(role = "user", content = text))
-            chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...")) 
+            chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...", messageType = msgType)) 
         }
 
         val js: String = when {
@@ -131,70 +143,48 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         webView?.evaluateJavascript(js, null)
     }
 
-    // دالة فريق الوكلاء مع دعم الوكلاء المخصصين
-    fun startMultiAgent(appIdea: String, customRoles: List<String>, webView: android.webkit.WebView?) {
-        if (appIdea.isBlank() || !_isReady.value) return
-        
-        val rolesList = if (customRoles.isEmpty()) listOf("Architect", "UI Designer", "Logic Developer", "Reviewer") else customRoles
-        
+    // استلام الصورة: تحميلها وحفظها كملف محلي
+    fun onImageReceived(url: String) {
+        getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
         viewModelScope.launch {
-            chatDao.insertMessage(ChatEntity(role = "user", content = "Build App: $appIdea\nAgents: ${rolesList.joinToString(", ")}"))
-            chatDao.insertMessage(ChatEntity(role = "ai", content = "Agent Team is planning...")) 
+            try {
+                val context = getApplication<Application>()
+                val imageFile = File(context.filesDir, "gen_${System.currentTimeMillis()}.png")
+                
+                withContext(Dispatchers.IO) {
+                    if (url.startsWith("data:image")) {
+                        // فك تشفير base64 وحفظ الملف
+                        val base64Data = url.substringAfter(",")
+                        val imageBytes = Base64.decode(base64Data, Base64.DEFAULT)
+                        imageFile.writeBytes(imageBytes)
+                    } else if (url.startsWith("http")) {
+                        // تحميل من الرابط
+                        val client = OkHttpClient()
+                        val request = Request.Builder().url(url).build()
+                        client.newCall(request).execute().use { response ->
+                            if (response.isSuccessful) {
+                                response.body?.byteStream()?.use { input ->
+                                    imageFile.outputStream().use { output -> input.copyTo(output) }
+                                }
+                            } else {
+                                throw Exception("Failed to download image: ${response.code}")
+                            }
+                        }
+                    } else {
+                        throw Exception("Invalid image URL format")
+                    }
+                }
+                
+                chatDao.deleteThinkingMessage()
+                chatDao.insertMessage(ChatEntity(role = "ai", content = imageFile.absolutePath, messageType = "IMAGE"))
+                sendNotification("Nexus AI", "Image generated!")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                chatDao.deleteThinkingMessage()
+                chatDao.insertMessage(ChatEntity(role = "ai", content = "❌ Error: ${e.message}", messageType = "TEXT"))
+                sendNotification("Nexus AI", "Image generation failed.")
+            }
         }
-
-        val agentsDescription = rolesList.mapIndexed { index, role -> "${index + 1}. $role" }.joinToString("\n")
-
-        val multiAgentPrompt = """
-            You are an Elite Multi-Agent Software Team. I will give you an app idea, and you must build it from scratch.
-            
-            Your specific team members and their roles are:
-            $agentsDescription
-
-            Idea: "$appIdea"
-
-            Phase 1: Each agent must contribute their part of the plan.
-            Phase 2: Write the FULL code for each file required to build this app.
-            
-            IMPORTANT: You must format the output exactly like this:
-            [FILE: path/to/file.kt]
-            ```kotlin
-            <FULL CODE>
-            ```
-            Do not skip any imports. Write clean, compilable code.
-        """.trimIndent()
-
-        val js = "window.askPuter(\"${multiAgentPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
-        webView?.evaluateJavascript(js, null)
-    }
-
-    fun startGhostMode(errorLog: String, webView: android.webkit.WebView?) {
-        if (errorLog.isBlank() || !_isReady.value) return
-        
-        viewModelScope.launch {
-            chatDao.insertMessage(ChatEntity(role = "user", content = "Fix this build error:\n$errorLog"))
-            chatDao.insertMessage(ChatEntity(role = "ai", content = "Ghost Mode is analyzing the error...")) 
-        }
-
-        val ghostPrompt = """
-            You are in Ghost Mode (Auto-Fix). The build just failed with the following error log:
-            
-            $errorLog
-            
-            Here are the current files in the project:
-            ${WorkspaceManager.projectFiles.entries.joinToString("\n\n") { "--- FILE: ${it.key} ---\n${it.value}" }}
-            
-            Your task:
-            1. Analyze the error.
-            2. Fix the code.
-            3. Output the FULL modified code using this format:
-            [FILE: path/to/file.kt]
-            ```kotlin
-            <FULL CODE>
-            ```
-        """.trimIndent()
-
-        val js = "window.askPuter(\"${ghostPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
-        webView?.evaluateJavascript(js, null)
     }
 
     fun onResponse(res: String) {
@@ -203,15 +193,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             chatDao.deleteThinkingMessage()
             chatDao.insertMessage(ChatEntity(role = "ai", content = res, messageType = "TEXT"))
             sendNotification("Nexus AI", "New response received.")
-        }
-    }
-
-    fun onImageReceived(url: String) {
-        getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
-        viewModelScope.launch {
-            chatDao.deleteThinkingMessage()
-            chatDao.insertMessage(ChatEntity(role = "ai", content = url, messageType = "IMAGE"))
-            sendNotification("Nexus AI", "Image generated!")
         }
     }
 
