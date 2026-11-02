@@ -18,6 +18,7 @@ import com.hiyako.app.data.WorkspaceManager
 import com.hiyako.app.data.db.AppDatabase
 import com.hiyako.app.data.db.ChatEntity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -57,8 +58,8 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     private val _filteredModels = MutableStateFlow<List<AiModel>>(emptyList())
     val filteredModels = _filteredModels.asStateFlow()
 
-    private var pendingMessage: String? = null
-    private var pendingWebView: android.webkit.WebView? = null
+    // لضمان عدم تعليق "Thinking..." للأبد
+    private var currentRequestId: Long = 0
 
     init {
         viewModelScope.launch {
@@ -106,24 +107,19 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(text: String, webView: android.webkit.WebView?, forceType: String? = null) {
         if (text.isBlank() || !_isReady.value) return
         
-        if (forceType != null) {
-            // If forceType is provided (e.g. from Grid), skip classification
-            executeSendMessage(text, webView, forceType)
-        } else {
-            // Ask AI to classify intent
-            pendingMessage = text
-            pendingWebView = webView
-            val js = "window.classifyIntent(\"${text.replace("\"", "\\\"")}\");"
-            webView?.evaluateJavascript(js, null)
+        // تصنيف بسيط وسريع (بدون الاعتماد على نموذج AI منفصل)
+        val msgType = forceType ?: when {
+            text.startsWith("ارسم", ignoreCase = true) -> "IMAGE"
+            text.startsWith("سويلي صورة", ignoreCase = true) -> "IMAGE"
+            text.startsWith("اصنع صورة", ignoreCase = true) -> "IMAGE"
+            text.startsWith("generate an image", ignoreCase = true) -> "IMAGE"
+            text.startsWith("create an image", ignoreCase = true) -> "IMAGE"
+            text.startsWith("create a video", ignoreCase = true) -> "VIDEO"
+            text.startsWith("generate a video", ignoreCase = true) -> "VIDEO"
+            else -> "TEXT"
         }
-    }
 
-    fun onIntentClassified(type: String) {
-        val text = pendingMessage ?: return
-        val webView = pendingWebView ?: return
-        pendingMessage = null
-        pendingWebView = null
-        executeSendMessage(text, webView, type)
+        executeSendMessage(text, webView, msgType)
     }
 
     private fun executeSendMessage(text: String, webView: android.webkit.WebView?, type: String) {
@@ -134,9 +130,26 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         val intent = Intent(getApplication(), NexusService::class.java)
         ContextCompat.startForegroundService(getApplication(), intent)
 
+        val requestId = ++currentRequestId
+
         viewModelScope.launch {
             chatDao.insertMessage(ChatEntity(role = "user", content = text))
             chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...", messageType = type)) 
+        }
+
+        // مؤقت احتياطي في Kotlin (90 ثانية) لضمان عدم التعليق للأبد
+        viewModelScope.launch {
+            delay(90000)
+            if (requestId == currentRequestId) {
+                // الطلب لا يزال جارياً بعد 90 ثانية
+                chatDao.deleteThinkingMessage()
+                chatDao.insertMessage(ChatEntity(
+                    role = "ai", 
+                    content = "⏱️ Timeout: The AI took more than 90 seconds. Please try a different model or check your internet.", 
+                    messageType = "TEXT"
+                ))
+                currentRequestId++ // إلغاء الطلب
+            }
         }
 
         val js: String = when (type) {
@@ -164,7 +177,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         webView?.evaluateJavascript(js, null)
     }
 
-    // دالة فريق الوكلاء مع دعم الوكلاء المخصصين
     fun startMultiAgent(appIdea: String, customRoles: List<String>, webView: android.webkit.WebView?) {
         if (appIdea.isBlank() || !_isReady.value) return
         
@@ -231,6 +243,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onImageReceived(url: String) {
+        currentRequestId++ // إلغاء المؤقت الاحتياطي
         getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
         viewModelScope.launch {
             try {
@@ -264,6 +277,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onResponse(res: String) {
+        currentRequestId++ // إلغاء المؤقت الاحتياطي
         getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
         viewModelScope.launch {
             chatDao.deleteThinkingMessage()
@@ -273,6 +287,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onVideoReceived(url: String) {
+        currentRequestId++
         getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
         viewModelScope.launch {
             chatDao.deleteThinkingMessage()
@@ -357,5 +372,4 @@ class AiBridge(private val vm: AiViewModel) {
     @JavascriptInterface fun onImageReceived(url: String) { vm.onImageReceived(url) }
     @JavascriptInterface fun onVideoReceived(url: String) { vm.onVideoReceived(url) }
     @JavascriptInterface fun onModelsReceived(json: String) { vm.onModelsReceived(json) }
-    @JavascriptInterface fun onIntentClassified(type: String) { vm.onIntentClassified(type) }
 }
