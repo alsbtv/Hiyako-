@@ -24,7 +24,8 @@ import java.util.regex.Pattern
 data class Message(
     val content: String, 
     val isUser: Boolean, 
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val type: String = "TEXT"
 )
 data class AiModel(val name: String, val id: String)
 
@@ -53,7 +54,9 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             chatDao.getAllMessages().collect { entities ->
-                _messages.value = entities.map { Message(it.content, it.role == "user") }
+                _messages.value = entities.map { 
+                    Message(it.content, it.role == "user", type = it.messageType) 
+                }
             }
         }
     }
@@ -79,7 +82,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         _filteredModels.value = if (query.isBlank()) _availableModels.value else _availableModels.value.filter { it.name.contains(query, ignoreCase = true) }
     }
 
-    fun sendMessage(text: String, webView: android.webkit.WebView?) {
+    fun sendMessage(text: String, webView: android.webkit.WebView?, forceType: String? = null) {
         if (text.isBlank() || !_isReady.value) return
         
         if (_messages.value.isEmpty() || _messages.value.size == 1) {
@@ -89,58 +92,130 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         val intent = Intent(getApplication(), NexusService::class.java)
         ContextCompat.startForegroundService(getApplication(), intent)
 
+        val isImageRequest = forceType == "IMAGE" || text.contains("image", true) || text.contains("صورة", true) || text.contains("ارسم", true)
+        val isVideoRequest = forceType == "VIDEO" || text.contains("video", true) || text.contains("فيديو", true)
+
         viewModelScope.launch {
-            // إضافة رسالة المستخدم فقط، دون مسح القديم
             chatDao.insertMessage(ChatEntity(role = "user", content = text))
             chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...")) 
         }
 
-        var fullPrompt = ""
-        if (WorkspaceManager.isLoaded) {
-            fullPrompt += "You are an expert Android Developer modifying '${WorkspaceManager.activeRepo}'.\n"
-            fullPrompt += "When you perform actions, you MUST list them before the code using EXACT tags:\n"
-            fullPrompt += "[READ: path]\n[MODIFY: path]\n[ADD: path]\n[DELETE: path]\n\n"
-            
-            // الذكاء الاصطناعي: إرسال الملفات المذكورة في البرومبت فقط
-            val mentionedFiles = WorkspaceManager.projectFiles.filterKeys { path ->
-                text.contains(path.substringAfterLast("/")) || text.contains(path) || text.contains(path.substringAfterLast("/").removeSuffix(".kt"))
-            }
-
-            if (mentionedFiles.isNotEmpty()) {
-                fullPrompt += "Here are the FULL contents of the files you need to look at:\n\n"
-                mentionedFiles.forEach { (path, content) ->
-                    fullPrompt += "--- START FILE: $path ---\n$content\n--- END FILE: $path ---\n\n"
+        val js: String = when {
+            isImageRequest -> "window.generateImage(\"${text.replace("\"", "\\\"")}\");"
+            isVideoRequest -> "window.generateVideo(\"${text.replace("\"", "\\\"")}\");"
+            else -> {
+                var fullPrompt = ""
+                if (WorkspaceManager.isLoaded) {
+                    val mentionedFiles = WorkspaceManager.projectFiles.filterKeys { path ->
+                        text.contains(path.substringAfterLast("/")) || text.contains(path)
+                    }
+                    if (mentionedFiles.isNotEmpty()) {
+                        fullPrompt += "Here are the files:\n"
+                        mentionedFiles.forEach { (path, content) -> fullPrompt += "--- $path ---\n$content\n" }
+                    } else {
+                        fullPrompt += "Project files:\n" + WorkspaceManager.projectFiles.keys.joinToString("\n")
+                    }
+                    fullPrompt += "\nUser Request: $text\nOutput FULL code with [FILE: path] format if needed."
+                } else {
+                    fullPrompt = text
                 }
-            } else {
-                // إذا لم يذكر ملفاً، نرسل قائمة الملفات فقط ليطلب ما يريد
-                fullPrompt += "The project contains the following files:\n"
-                WorkspaceManager.projectFiles.keys.forEach { path -> fullPrompt += "- $path\n" }
-                fullPrompt += "\nPlease identify which files you need to see, or proceed if you already know.\n"
+                "window.askPuter(\"${fullPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
             }
-            
-            fullPrompt += "User Request: $text\n"
-            fullPrompt += "Output FULL modified code using this format:\n[FILE: path]\n```kotlin\n<CODE>\n```\n"
-        } else {
-            fullPrompt = text
         }
 
-        val safeText = fullPrompt.replace("\"", "\\\"").replace("\n", "\\n")
-        val js = "window.askPuter(\"$safeText\", \"${_selectedModel.value.id}\");"
+        webView?.evaluateJavascript(js, null)
+    }
+
+    // دالة فريق الوكلاء مع دعم الوكلاء المخصصين
+    fun startMultiAgent(appIdea: String, customRoles: List<String>, webView: android.webkit.WebView?) {
+        if (appIdea.isBlank() || !_isReady.value) return
+        
+        val rolesList = if (customRoles.isEmpty()) listOf("Architect", "UI Designer", "Logic Developer", "Reviewer") else customRoles
+        
+        viewModelScope.launch {
+            chatDao.insertMessage(ChatEntity(role = "user", content = "Build App: $appIdea\nAgents: ${rolesList.joinToString(", ")}"))
+            chatDao.insertMessage(ChatEntity(role = "ai", content = "Agent Team is planning...")) 
+        }
+
+        val agentsDescription = rolesList.mapIndexed { index, role -> "${index + 1}. $role" }.joinToString("\n")
+
+        val multiAgentPrompt = """
+            You are an Elite Multi-Agent Software Team. I will give you an app idea, and you must build it from scratch.
+            
+            Your specific team members and their roles are:
+            $agentsDescription
+
+            Idea: "$appIdea"
+
+            Phase 1: Each agent must contribute their part of the plan.
+            Phase 2: Write the FULL code for each file required to build this app.
+            
+            IMPORTANT: You must format the output exactly like this:
+            [FILE: path/to/file.kt]
+            ```kotlin
+            <FULL CODE>
+            ```
+            Do not skip any imports. Write clean, compilable code.
+        """.trimIndent()
+
+        val js = "window.askPuter(\"${multiAgentPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
+        webView?.evaluateJavascript(js, null)
+    }
+
+    fun startGhostMode(errorLog: String, webView: android.webkit.WebView?) {
+        if (errorLog.isBlank() || !_isReady.value) return
+        
+        viewModelScope.launch {
+            chatDao.insertMessage(ChatEntity(role = "user", content = "Fix this build error:\n$errorLog"))
+            chatDao.insertMessage(ChatEntity(role = "ai", content = "Ghost Mode is analyzing the error...")) 
+        }
+
+        val ghostPrompt = """
+            You are in Ghost Mode (Auto-Fix). The build just failed with the following error log:
+            
+            $errorLog
+            
+            Here are the current files in the project:
+            ${WorkspaceManager.projectFiles.entries.joinToString("\n\n") { "--- FILE: ${it.key} ---\n${it.value}" }}
+            
+            Your task:
+            1. Analyze the error.
+            2. Fix the code.
+            3. Output the FULL modified code using this format:
+            [FILE: path/to/file.kt]
+            ```kotlin
+            <FULL CODE>
+            ```
+        """.trimIndent()
+
+        val js = "window.askPuter(\"${ghostPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
         webView?.evaluateJavascript(js, null)
     }
 
     fun onResponse(res: String) {
         getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
-
         viewModelScope.launch {
-            // تحديث رسالة "التفكير" بالرد الفعلي دون مسح التاريخ
-            // في قاعدة البيانات، نقوم بمسح آخر رسالة "Thinking..." ونضع الرد الجديد
-            // للتبسيط، سنقوم فقط بإضافة الرد (سيتم إضافة تحسين لاحقاً لإزالة رسالة Thinking من الـ DB)
-            
-            // لإصلاح المشكلة، سنقوم بإضافة الرد فقط
             chatDao.deleteThinkingMessage()
-            chatDao.insertMessage(ChatEntity(role = "ai", content = res))
+            chatDao.insertMessage(ChatEntity(role = "ai", content = res, messageType = "TEXT"))
             sendNotification("Nexus AI", "New response received.")
+        }
+    }
+
+    fun onImageReceived(url: String) {
+        getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
+        viewModelScope.launch {
+            chatDao.deleteThinkingMessage()
+            chatDao.insertMessage(ChatEntity(role = "ai", content = url, messageType = "IMAGE"))
+            sendNotification("Nexus AI", "Image generated!")
+        }
+    }
+
+    fun onVideoReceived(url: String) {
+        getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
+        viewModelScope.launch {
+            chatDao.deleteThinkingMessage()
+            chatDao.insertMessage(ChatEntity(role = "ai", content = url, messageType = "VIDEO"))
+            sendNotification("Nexus AI", "Video generated!")
         }
     }
 
@@ -188,7 +263,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             _isBuilding.value = false
             context.stopService(Intent(context, NexusService::class.java))
             val successMsg = "✅ Successfully processed $successCount files on GitHub."
-            chatDao.insertMessage(ChatEntity(role = "ai", content = successMsg))
+            chatDao.insertMessage(ChatEntity(role = "ai", content = successMsg, messageType = "TEXT"))
             sendNotification("Build Started", "Pushed changes. Building...")
         }
     }
@@ -217,5 +292,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
 class AiBridge(private val vm: AiViewModel) {
     @JavascriptInterface fun onReady() { vm.setReady() }
     @JavascriptInterface fun onResponse(res: String) { vm.onResponse(res) }
+    @JavascriptInterface fun onImageReceived(url: String) { vm.onImageReceived(url) }
+    @JavascriptInterface fun onVideoReceived(url: String) { vm.onVideoReceived(url) }
     @JavascriptInterface fun onModelsReceived(json: String) { vm.onModelsReceived(json) }
 }

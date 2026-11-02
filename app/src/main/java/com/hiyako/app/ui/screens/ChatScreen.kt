@@ -24,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,6 +31,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hiyako.app.data.WorkspaceManager
 import com.hiyako.app.ui.components.ChatInputBar
+import com.hiyako.app.ui.components.EmptyStateGrid
 import com.hiyako.app.ui.components.MessageBubble
 import com.hiyako.app.ui.theme.*
 import kotlinx.coroutines.launch
@@ -41,10 +41,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun ChatScreen(
     onNavigateToWorkspace: () -> Unit = {},
-    onNavigateToUpdater: () -> Unit = {}, // تم إضافة المتغير المفقود
+    onNavigateToUpdater: () -> Unit = {},
     vm: AiViewModel = viewModel()
 ) {
-    val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
@@ -58,6 +57,16 @@ fun ChatScreen(
     var showModelSheet by remember { mutableStateOf(false) }
     var searchModelQuery by remember { mutableStateOf("") }
     var showLoginView by remember { mutableStateOf(false) }
+    var forceType by remember { mutableStateOf<String?>(null) }
+    
+    // Multi-Agent Config State
+    var showAgentConfig by remember { mutableStateOf(false) }
+    var appIdeaInput by remember { mutableStateOf("") }
+    var agentsInput by remember { mutableStateOf("Architect, UI Designer, Logic Developer, Reviewer") }
+
+    // Ghost Mode State
+    var showGhostModeInput by remember { mutableStateOf(false) }
+    var ghostErrorInput by remember { mutableStateOf("") }
 
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) {
@@ -79,7 +88,6 @@ fun ChatScreen(
                     )
                     Spacer(Modifier.height(16.dp))
                     
-                    // زر Workspace
                     Row(Modifier.fillMaxWidth().clickable { 
                         scope.launch { drawerState.close() }
                         onNavigateToWorkspace() 
@@ -89,7 +97,6 @@ fun ChatScreen(
                         Text("Workspace (GitHub)", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                     
-                    // زر التحديث (الذي كان مفقوداً)
                     Row(Modifier.fillMaxWidth().clickable { 
                         scope.launch { drawerState.close() }
                         onNavigateToUpdater() 
@@ -99,7 +106,6 @@ fun ChatScreen(
                         Text("Update App", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                     
-                    // زر تسجيل الدخول
                     Row(Modifier.fillMaxWidth().clickable { 
                         scope.launch { drawerState.close() }
                         showLoginView = true 
@@ -161,7 +167,7 @@ fun ChatScreen(
             bottomBar = {
                 if (!showLoginView) {
                     Column(Modifier.padding(bottom = 4.dp)) {
-                        ChatInputBar(input = input, onInputChange = { input = it }, onSend = { vm.sendMessage(input, webView); input = "" }, isLoading = false)
+                        ChatInputBar(input = input, onInputChange = { input = it }, onSend = { vm.sendMessage(input, webView, forceType); input = ""; forceType = null }, isLoading = false)
                         Spacer(Modifier.height(4.dp))
                         Row(Modifier.padding(horizontal = 12.dp)) {
                             AssistChip(
@@ -178,11 +184,25 @@ fun ChatScreen(
             Box(Modifier.padding(padding).fillMaxSize()) {
                 if (!showLoginView) {
                     if (messages.isEmpty()) {
-                        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Hi! What's on your mind today?", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                            if (WorkspaceManager.isLoaded) {
-                                Spacer(Modifier.height(4.dp))
-                                Text("Ready to code on ${WorkspaceManager.activeRepo}", color = AccentBlue, fontSize = 13.sp)
+                        EmptyStateGrid { action ->
+                            when(action) {
+                                "Build App" -> {
+                                    appIdeaInput = "Build an app that "
+                                    showAgentConfig = true
+                                }
+                                "Ghost Fix" -> {
+                                    showGhostModeInput = true
+                                }
+                                "Image" -> {
+                                    forceType = "IMAGE"
+                                    input = "Generate an image of "
+                                }
+                                "Video" -> {
+                                    forceType = "VIDEO"
+                                    input = "Generate a video of "
+                                }
+                                "Deep Research" -> input = "Do deep research on "
+                                "Writing" -> input = "Write me an article about "
                             }
                         }
                     } else {
@@ -191,19 +211,102 @@ fun ChatScreen(
                                 MessageBubble(
                                     text = msg.content, 
                                     isUser = msg.isUser, 
-                                    isLoading = msg.isLoading, 
-                                    
-                                    onApplyChanges = { response -> 
-                                        val token = context.getSharedPreferences("nexus_prefs", android.content.Context.MODE_PRIVATE).getString("github_token", "") ?: ""
-                                        vm.applyChanges(token, response, context) 
-                                    }
+                                    isLoading = msg.isLoading,
+                                    type = msg.type
                                 )
                             }
                         }
                     }
                 }
 
-                // المحرك المخفي / شاشة تسجيل الدخول
+                // Multi-Agent Config Dialog
+                if (showAgentConfig) {
+                    AlertDialog(
+                        onDismissRequest = { showAgentConfig = false },
+                        title = { Text("Configure AI Agents", color = TextPrimary) },
+                        text = {
+                            Column {
+                                Text("App Idea:", color = TextSecondary, fontSize = 14.sp)
+                                OutlinedTextField(
+                                    value = appIdeaInput,
+                                    onValueChange = { appIdeaInput = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = CardDark, unfocusedContainerColor = CardDark, focusedBorderColor = AccentBlue)
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text("AI Agents (comma separated):", color = TextSecondary, fontSize = 14.sp)
+                                OutlinedTextField(
+                                    value = agentsInput,
+                                    onValueChange = { agentsInput = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = CardDark, unfocusedContainerColor = CardDark, focusedBorderColor = AccentBlue)
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    val roles = agentsInput.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                                    vm.startMultiAgent(appIdeaInput, roles, webView)
+                                    showAgentConfig = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                            ) {
+                                Text("Start Team")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showAgentConfig = false }) {
+                                Text("Cancel", color = TextSecondary)
+                            }
+                        },
+                        containerColor = OledBlack
+                    )
+                }
+
+                // Ghost Mode Config Dialog
+                if (showGhostModeInput) {
+                    AlertDialog(
+                        onDismissRequest = { showGhostModeInput = false },
+                        title = { Text("Ghost Mode (Auto-Fix)", color = TextPrimary) },
+                        text = {
+                            Column {
+                                Text("Paste the build error log below:", color = TextSecondary, fontSize = 14.sp)
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = ghostErrorInput,
+                                    onValueChange = { ghostErrorInput = it },
+                                    modifier = Modifier.fillMaxWidth().height(150.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = CardDark,
+                                        unfocusedContainerColor = CardDark,
+                                        focusedBorderColor = AccentBlue
+                                    )
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    vm.startGhostMode(ghostErrorInput, webView)
+                                    showGhostModeInput = false
+                                    ghostErrorInput = ""
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                            ) {
+                                Text("Fix Code")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showGhostModeInput = false }) {
+                                Text("Cancel", color = TextSecondary)
+                            }
+                        },
+                        containerColor = OledBlack
+                    )
+                }
+
+                // Hidden WebView
                 AndroidView(
                     factory = { ctx -> WebView(ctx).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -220,7 +323,6 @@ fun ChatScreen(
                             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
                                 val context = view?.context ?: return false
                                 val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
-                                
                                 val popupWebView = WebView(context).apply {
                                     settings.javaScriptEnabled = true
                                     settings.domStorageEnabled = true
@@ -228,14 +330,12 @@ fun ChatScreen(
                                         override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean { return false }
                                     }
                                 }
-                                
                                 val dialog = Dialog(context).apply {
                                     setContentView(popupWebView)
                                     window?.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
                                     setOnDismissListener { popupWebView.destroy() }
                                     show()
                                 }
-                                
                                 transport.webView = popupWebView
                                 resultMsg.sendToTarget()
                                 return true
@@ -271,6 +371,17 @@ fun ChatScreen(
                                             let text = (typeof r === 'string') ? r : (r.message ? r.message.content : (r.result ? r.result.message.content : JSON.stringify(r)));
                                             AndroidBridge.onResponse(text);
                                         }).catch(e => AndroidBridge.onResponse('Error: ' + JSON.stringify(e)));
+                                };
+                                window.generateImage = function(p) {
+                                    puter.ai.txt2img(p).then(r => {
+                                        AndroidBridge.onImageReceived(r.src);
+                                    }).catch(e => AndroidBridge.onResponse('Error: ' + JSON.stringify(e)));
+                                };
+                                window.generateVideo = function(p) {
+                                    AndroidBridge.onVideoReceived("Processing video..."); 
+                                    puter.ai.txt2vid(p).then(r => {
+                                        AndroidBridge.onResponse('Video generation is not supported natively yet via Puter.js API.');
+                                    }).catch(e => AndroidBridge.onResponse('Error: ' + JSON.stringify(e)));
                                 };
                             </script></body></html>
                         """.trimIndent()

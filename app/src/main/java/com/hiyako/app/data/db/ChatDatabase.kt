@@ -16,8 +16,8 @@ data class ChatEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val role: String, // "user" or "ai"
     val content: String,
-    val timestamp: Long = System.currentTimeMillis(),
-    val hasCodeChanges: Boolean = false
+    val messageType: String = "TEXT", // "TEXT", "IMAGE", "VIDEO"
+    val timestamp: Long = System.currentTimeMillis()
 )
 
 @Dao
@@ -35,7 +35,7 @@ interface ChatDao {
     suspend fun clearChat()
 }
 
-@Database(entities = [ChatEntity::class], version = 1, exportSchema = false)
+@Database(entities = [ChatEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
 

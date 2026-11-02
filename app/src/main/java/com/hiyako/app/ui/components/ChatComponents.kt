@@ -1,6 +1,7 @@
 package com.hiyako.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,45 +14,31 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import coil.compose.AsyncImage
 import com.hiyako.app.ui.theme.AccentBlue
 import com.hiyako.app.ui.theme.CardDark
 import com.hiyako.app.ui.theme.TextPrimary
 import com.hiyako.app.ui.theme.TextSecondary
-import java.util.regex.Pattern
 
 @Composable
 fun MessageBubble(
     text: String,
     isUser: Boolean,
     isLoading: Boolean = false,
-    onApplyChanges: (String) -> Unit = {}
+    type: String = "TEXT"
 ) {
     val arrangement = if (isUser) Arrangement.End else Arrangement.Start
-    val cleanText = text.replace("**", "").replace("```", "").trim()
-
-    // استخراج الأوامر (READ, MODIFY, ADD, DELETE)
-    val actionPattern = Pattern.compile("\\[(READ|MODIFY|ADD|DELETE):\\s*(.*?)\\]")
-    val actionMatcher = actionPattern.matcher(text)
-    val actions = mutableListOf<Pair<String, String>>()
-    while (actionMatcher.find()) {
-        actionMatcher.group(1)?.let { type ->
-            actionMatcher.group(2)?.let { path ->
-                actions.add(Pair(type, path.trim()))
-            }
-        }
-    }
-
-    // إزالة الأوامر من النص المعروض لكي لا تظهر مرتين
-    var displayText = cleanText
-    actions.forEach { (type, path) ->
-        displayText = displayText.replace("[$type: $path]", "").trim()
-    }
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -76,58 +63,38 @@ fun MessageBubble(
                     if (isLoading) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(color = AccentBlue, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Thinking...", color = TextSecondary, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Generating...", color = TextSecondary, fontSize = 14.sp)
                         }
                     } else {
-                        Text(text = displayText, color = TextPrimary, fontSize = 15.sp, lineHeight = 22.sp, textAlign = if (isUser) TextAlign.End else TextAlign.Start, style = TextStyle(textDirection = TextDirection.Content))
-                    }
-                }
-            }
-            
-            // عرض بطاقات الأوامر (مثل Hefesto)
-            if (actions.isNotEmpty() && !isUser) {
-                Spacer(Modifier.height(8.dp))
-                Column(
-                    Modifier.background(CardDark, RoundedCornerShape(8.dp)).fillMaxWidth().padding(12.dp)
-                ) {
-                    Text("AI Actions", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(6.dp))
-                    actions.forEach { (type, path) ->
-                        val icon = when(type) {
-                            "READ" -> Icons.Default.Menu
-                            "MODIFY" -> Icons.Default.Edit
-                            "ADD" -> Icons.Default.Add
-                            "DELETE" -> Icons.Default.Delete
-                            else -> Icons.Default.Info
-                        }
-                        val tintColor = when(type) {
-                            "READ" -> Color(0xFF00E5FF)
-                            "MODIFY" -> Color(0xFFFFEB3B)
-                            "ADD" -> Color(0xFF4CAF50)
-                            "DELETE" -> Color(0xFFF44336)
-                            else -> Color.White
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                            Icon(icon, null, tint = tintColor, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("$type: $path", color = TextPrimary, fontSize = 13.sp, maxLines = 1)
-                        }
-                    }
-                    
-                    // زر التطبيق
-                    val hasCode = text.contains("[FILE:")
-                    if (hasCode) {
-                        Spacer(Modifier.height(10.dp))
-                        Button(
-                            onClick = { onApplyChanges(text) },
-                            colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth().height(36.dp)
-                        ) {
-                            Icon(Icons.Default.Build, null, modifier = Modifier.size(16.dp), tint = Color.White)
-                            Spacer(Modifier.width(6.dp))
-                            Text("Apply & Build", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        when (type) {
+                            "IMAGE" -> {
+                                AsyncImage(
+                                    model = text,
+                                    contentDescription = "Generated Image",
+                                    modifier = Modifier.size(250.dp).background(Color.DarkGray, RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            "VIDEO" -> {
+                                val context = androidx.compose.ui.platform.LocalContext.current
+                                val exoPlayer = remember { ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(text)); prepare(); playWhenReady = true } }
+                                DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
+                                AndroidView(
+                                    factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer } },
+                                    modifier = Modifier.size(250.dp, 150.dp).background(Color.Black, RoundedCornerShape(8.dp))
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    text = text.replace("**", "").replace("```", "").trim(), 
+                                    color = TextPrimary, 
+                                    fontSize = 15.sp, 
+                                    lineHeight = 22.sp, 
+                                    textAlign = if (isUser) TextAlign.End else TextAlign.Start, 
+                                    style = TextStyle(textDirection = TextDirection.Content)
+                                )
+                            }
                         }
                     }
                 }
@@ -148,6 +115,47 @@ fun ChatInputBar(input: String, onInputChange: (String) -> Unit, onSend: () -> U
             )
             FilledIconButton(onClick = onSend, enabled = input.isNotBlank() && !isLoading, modifier = Modifier.size(40.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = if (input.isNotBlank()) AccentBlue else Color.Transparent)) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = if (input.isNotBlank()) Color.White else TextSecondary, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
+}
+
+// واجهة المربعات (Grid) للشاشة الفارغة
+@Composable
+fun EmptyStateGrid(
+    onActionClick: (String) -> Unit
+) {
+    val actions = listOf(
+        Triple("Image", Icons.Default.Image, Color(0xFFE91E63)),
+        Triple("Video", Icons.Default.VideoCall, Color(0xFF9C27B0)),
+        Triple("Build App", Icons.Default.Build, Color(0xFF2196F3)),
+        Triple("Deep Research", Icons.Default.Search, Color(0xFF4CAF50)),
+        Triple("Writing", Icons.Default.Edit, Color(0xFFFF9800)),
+        Triple("Free Chat", Icons.Default.Chat, Color(0xFF00BCD4))
+    )
+
+    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+        columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(actions.size) { index ->
+            val (title, icon, color) = actions[index]
+            Card(
+                modifier = Modifier.aspectRatio(1.2f).clickable { onActionClick(title) },
+                colors = CardDefaults.cardColors(containerColor = CardDark),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(icon, null, tint = color, modifier = Modifier.size(36.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
