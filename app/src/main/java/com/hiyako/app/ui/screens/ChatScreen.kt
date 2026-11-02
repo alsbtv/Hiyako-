@@ -59,12 +59,10 @@ fun ChatScreen(
     var showLoginView by remember { mutableStateOf(false) }
     var forceType by remember { mutableStateOf<String?>(null) }
     
-    // Multi-Agent Config State
     var showAgentConfig by remember { mutableStateOf(false) }
     var appIdeaInput by remember { mutableStateOf("") }
     var agentsInput by remember { mutableStateOf("Architect, UI Designer, Logic Developer, Reviewer") }
 
-    // Ghost Mode State
     var showGhostModeInput by remember { mutableStateOf(false) }
     var ghostErrorInput by remember { mutableStateOf("") }
 
@@ -219,7 +217,6 @@ fun ChatScreen(
                     }
                 }
 
-                // Multi-Agent Config Dialog
                 if (showAgentConfig) {
                     AlertDialog(
                         onDismissRequest = { showAgentConfig = false },
@@ -264,7 +261,6 @@ fun ChatScreen(
                     )
                 }
 
-                // Ghost Mode Config Dialog
                 if (showGhostModeInput) {
                     AlertDialog(
                         onDismissRequest = { showGhostModeInput = false },
@@ -306,7 +302,6 @@ fun ChatScreen(
                     )
                 }
 
-                // Hidden WebView
                 AndroidView(
                     factory = { ctx -> WebView(ctx).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -374,7 +369,11 @@ fun ChatScreen(
                                 };
                                 window.generateImage = function(p) {
                                     puter.ai.txt2img(p).then(r => {
-                                        AndroidBridge.onImageReceived(r.src);
+                                        if (r && r.src && typeof r.src === 'string') {
+                                            AndroidBridge.onImageReceived(r.src);
+                                        } else {
+                                            AndroidBridge.onResponse('Error: Image generation failed or returned invalid URL.');
+                                        }
                                     }).catch(e => AndroidBridge.onResponse('Error: ' + JSON.stringify(e)));
                                 };
                                 window.generateVideo = function(p) {

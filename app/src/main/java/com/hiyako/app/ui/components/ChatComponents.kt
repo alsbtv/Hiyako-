@@ -1,7 +1,6 @@
 package com.hiyako.app.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,15 +20,37 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.hiyako.app.ui.theme.AccentBlue
 import com.hiyako.app.ui.theme.CardDark
 import com.hiyako.app.ui.theme.TextPrimary
 import com.hiyako.app.ui.theme.TextSecondary
+import kotlinx.coroutines.delay
+
+@Composable
+fun AnimatedLoadingText(type: String) {
+    var dotCount by remember { mutableIntStateOf(1) }
+    
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(500)
+            dotCount = if (dotCount == 3) 1 else dotCount + 1
+        }
+    }
+    
+    val baseText = when (type) {
+        "IMAGE" -> "Creating image"
+        "VIDEO" -> "Generating video"
+        else -> "Thinking"
+    }
+    
+    Text(
+        text = "$baseText${".".repeat(dotCount)}",
+        color = TextSecondary,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Medium
+    )
+}
 
 @Composable
 fun MessageBubble(
@@ -59,31 +80,26 @@ fun MessageBubble(
                 color = if (isUser) CardDark else Color.Transparent,
                 shape = RoundedCornerShape(topStart = if (isUser) 16.dp else 0.dp, topEnd = if (isUser) 0.dp else 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
             ) {
-                Box(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                     if (isLoading) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(color = AccentBlue, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Generating...", color = TextSecondary, fontSize = 14.sp)
-                        }
+                        AnimatedLoadingText(type = type)
                     } else {
                         when (type) {
                             "IMAGE" -> {
-                                AsyncImage(
-                                    model = text,
-                                    contentDescription = "Generated Image",
-                                    modifier = Modifier.size(250.dp).background(Color.DarkGray, RoundedCornerShape(8.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
+                                if (text.startsWith("http") || text.startsWith("data:image")) {
+                                    AsyncImage(
+                                        model = text,
+                                        contentDescription = "Generated Image",
+                                        modifier = Modifier.size(250.dp).background(Color.DarkGray, RoundedCornerShape(8.dp)),
+                                        contentScale = ContentScale.Crop,
+                                        onError = { /* تجاهل الخطأ */ }
+                                    )
+                                } else {
+                                    Text("❌ Failed to load image.", color = Color.Red, fontSize = 14.sp)
+                                }
                             }
                             "VIDEO" -> {
-                                val context = androidx.compose.ui.platform.LocalContext.current
-                                val exoPlayer = remember { ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(text)); prepare(); playWhenReady = true } }
-                                DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
-                                AndroidView(
-                                    factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer } },
-                                    modifier = Modifier.size(250.dp, 150.dp).background(Color.Black, RoundedCornerShape(8.dp))
-                                )
+                                Text("Video generation is not supported natively yet.", color = TextPrimary, fontSize = 14.sp)
                             }
                             else -> {
                                 Text(
@@ -120,18 +136,17 @@ fun ChatInputBar(input: String, onInputChange: (String) -> Unit, onSend: () -> U
     }
 }
 
-// واجهة المربعات (Grid) للشاشة الفارغة
 @Composable
 fun EmptyStateGrid(
     onActionClick: (String) -> Unit
 ) {
     val actions = listOf(
+        Triple("Build App", Icons.Default.Build, Color(0xFF2196F3)),
+        Triple("Ghost Fix", Icons.Default.BugReport, Color(0xFFF44336)),
         Triple("Image", Icons.Default.Image, Color(0xFFE91E63)),
         Triple("Video", Icons.Default.VideoCall, Color(0xFF9C27B0)),
-        Triple("Build App", Icons.Default.Build, Color(0xFF2196F3)),
         Triple("Deep Research", Icons.Default.Search, Color(0xFF4CAF50)),
-        Triple("Writing", Icons.Default.Edit, Color(0xFFFF9800)),
-        Triple("Free Chat", Icons.Default.Chat, Color(0xFF00BCD4))
+        Triple("Writing", Icons.Default.Edit, Color(0xFFFF9800))
     )
 
     androidx.compose.foundation.lazy.grid.LazyVerticalGrid(

@@ -53,10 +53,15 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            chatDao.getAllMessages().collect { entities ->
-                _messages.value = entities.map { 
-                    Message(it.content, it.role == "user", type = it.messageType) 
+            try {
+                chatDao.getAllMessages().collect { entities ->
+                    _messages.value = entities.map { 
+                        Message(it.content, it.role == "user", type = it.messageType) 
+                    }
                 }
+            } catch (e: Exception) {
+                // إذا كانت قاعدة البيانات تالفة، نقوم بمسحها لإيقاف الانهيار
+                chatDao.clearChat()
             }
         }
     }
