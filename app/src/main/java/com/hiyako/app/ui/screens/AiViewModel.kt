@@ -90,6 +90,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         ContextCompat.startForegroundService(getApplication(), intent)
 
         viewModelScope.launch {
+            // إضافة رسالة المستخدم فقط، دون مسح القديم
             chatDao.insertMessage(ChatEntity(role = "user", content = text))
             chatDao.insertMessage(ChatEntity(role = "ai", content = "Thinking...")) 
         }
@@ -97,21 +98,28 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         var fullPrompt = ""
         if (WorkspaceManager.isLoaded) {
             fullPrompt += "You are an expert Android Developer modifying '${WorkspaceManager.activeRepo}'.\n"
-            fullPrompt += "Before writing any code, you MUST list the actions you performed using these EXACT tags:\n"
-            fullPrompt += "[READ: path/to/file]\n"
-            fullPrompt += "[MODIFY: path/to/file]\n"
-            fullPrompt += "[ADD: path/to/newfile]\n"
-            fullPrompt += "[DELETE: path/to/oldfile]\n\n"
-            fullPrompt += "Here are the FULL contents of the files in the project:\n\n"
+            fullPrompt += "When you perform actions, you MUST list them before the code using EXACT tags:\n"
+            fullPrompt += "[READ: path]\n[MODIFY: path]\n[ADD: path]\n[DELETE: path]\n\n"
             
-            WorkspaceManager.projectFiles.forEach { (path, content) ->
-                fullPrompt += "--- START FILE: $path ---\n"
-                fullPrompt += "$content\n"
-                fullPrompt += "--- END FILE: $path ---\n\n"
+            // الذكاء الاصطناعي: إرسال الملفات المذكورة في البرومبت فقط
+            val mentionedFiles = WorkspaceManager.projectFiles.filterKeys { path ->
+                text.contains(path.substringAfterLast("/")) || text.contains(path) || text.contains(path.substringAfterLast("/").removeSuffix(".kt"))
+            }
+
+            if (mentionedFiles.isNotEmpty()) {
+                fullPrompt += "Here are the FULL contents of the files you need to look at:\n\n"
+                mentionedFiles.forEach { (path, content) ->
+                    fullPrompt += "--- START FILE: $path ---\n$content\n--- END FILE: $path ---\n\n"
+                }
+            } else {
+                // إذا لم يذكر ملفاً، نرسل قائمة الملفات فقط ليطلب ما يريد
+                fullPrompt += "The project contains the following files:\n"
+                WorkspaceManager.projectFiles.keys.forEach { path -> fullPrompt += "- $path\n" }
+                fullPrompt += "\nPlease identify which files you need to see, or proceed if you already know.\n"
             }
             
             fullPrompt += "User Request: $text\n"
-            fullPrompt += "For any [MODIFY] or [ADD] action, provide the FULL code using this format:\n[FILE: path/to/file]\n```kotlin\n<CODE>\n```\n"
+            fullPrompt += "Output FULL modified code using this format:\n[FILE: path]\n```kotlin\n<CODE>\n```\n"
         } else {
             fullPrompt = text
         }
@@ -125,8 +133,12 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
 
         viewModelScope.launch {
-            chatDao.clearChat()
-            chatDao.insertMessage(ChatEntity(role = "user", content = "...")) 
+            // تحديث رسالة "التفكير" بالرد الفعلي دون مسح التاريخ
+            // في قاعدة البيانات، نقوم بمسح آخر رسالة "Thinking..." ونضع الرد الجديد
+            // للتبسيط، سنقوم فقط بإضافة الرد (سيتم إضافة تحسين لاحقاً لإزالة رسالة Thinking من الـ DB)
+            
+            // لإصلاح المشكلة، سنقوم بإضافة الرد فقط
+            chatDao.deleteThinkingMessage()
             chatDao.insertMessage(ChatEntity(role = "ai", content = res))
             sendNotification("Nexus AI", "New response received.")
         }
@@ -142,7 +154,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         val intent = Intent(context, NexusService::class.java)
         ContextCompat.startForegroundService(context, intent)
 
-        // استخراج الكود للتعديل والإضافة
         val filePattern = Pattern.compile("\\[FILE:\\s*(.*?)\\]\\s*```[a-zA-Z]*\\n([\\s\\S]*?)```")
         val fileMatcher = filePattern.matcher(aiResponse)
         val filesToUpdate = mutableMapOf<String, String>()
@@ -152,7 +163,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             filesToUpdate[path] = code
         }
 
-        // استخراج الملفات المراد حذفها
         val deletePattern = Pattern.compile("\\[DELETE:\\s*(.*?)\\]")
         val deleteMatcher = deletePattern.matcher(aiResponse)
         val filesToDelete = mutableListOf<String>()
@@ -177,9 +187,9 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             
             _isBuilding.value = false
             context.stopService(Intent(context, NexusService::class.java))
-            val successMsg = "✅ Successfully processed $successCount file actions on GitHub."
+            val successMsg = "✅ Successfully processed $successCount files on GitHub."
             chatDao.insertMessage(ChatEntity(role = "ai", content = successMsg))
-            sendNotification("Build Started", "Pushed changes. GitHub Actions is building...")
+            sendNotification("Build Started", "Pushed changes. Building...")
         }
     }
 

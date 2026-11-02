@@ -28,6 +28,9 @@ interface ChatDao {
     @Insert
     suspend fun insertMessage(message: ChatEntity)
 
+    @Query("DELETE FROM chat_messages WHERE role = 'ai' AND content = 'Thinking...'")
+    suspend fun deleteThinkingMessage()
+
     @Query("DELETE FROM chat_messages")
     suspend fun clearChat()
 }
