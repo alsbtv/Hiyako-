@@ -370,25 +370,29 @@ fun ChatScreen(
                                     }).catch(e => AndroidBridge.onModelsReceived("[]"));
                                 };
                                 window.classifyIntent = function(p) {
+                                    let timer = setTimeout(() => { AndroidBridge.onIntentClassified("TEXT"); }, 15000);
                                     let prompt = "Classify the following user request into one of these exact categories: IMAGE, VIDEO, TEXT. Output ONLY the category name. Do not add any other text or punctuation.\n\nRequest: " + p;
                                     puter.ai.chat(prompt, {model: 'claude-3-haiku-20240307'})
                                         .then(r => {
+                                            clearTimeout(timer);
                                             let res = (typeof r === 'string') ? r : (r.message ? r.message.content : (r.result ? r.result.message.content : 'TEXT'));
                                             let clean = res.trim().toUpperCase();
                                             if (clean.includes('IMAGE')) clean = 'IMAGE';
                                             else if (clean.includes('VIDEO')) clean = 'VIDEO';
                                             else clean = 'TEXT';
                                             AndroidBridge.onIntentClassified(clean);
-                                        }).catch(e => AndroidBridge.onIntentClassified('TEXT'));
+                                        }).catch(e => { clearTimeout(timer); AndroidBridge.onIntentClassified("TEXT"); });
                                 };
                                 window.askPuter = function(p, m) {
+                                    let timer = setTimeout(() => { AndroidBridge.onResponse("Error: Timeout. Model took too long."); }, 60000);
                                     let opts = { stream: false };
                                     if (m && m !== "") opts.model = m;
                                     puter.ai.chat(p, opts)
                                         .then(r => {
+                                            clearTimeout(timer);
                                             let text = (typeof r === 'string') ? r : (r.message ? r.message.content : (r.result ? r.result.message.content : JSON.stringify(r)));
                                             AndroidBridge.onResponse(text);
-                                        }).catch(e => AndroidBridge.onResponse('Error: ' + JSON.stringify(e)));
+                                        }).catch(e => { clearTimeout(timer); AndroidBridge.onResponse('Error: ' + JSON.stringify(e)); });
                                 };
                                 window.generateImage = function(p) {
                                     puter.ai.txt2img(p).then(r => {
@@ -397,13 +401,13 @@ fun ChatScreen(
                                         } else {
                                             AndroidBridge.onResponse('Error: Image generation failed or returned invalid URL.');
                                         }
-                                    }).catch(e => AndroidBridge.onResponse('Error: ' + JSON.stringify(e)));
+                                    }).catch(e => { clearTimeout(timer); AndroidBridge.onResponse('Error: ' + JSON.stringify(e)); });
                                 };
                                 window.generateVideo = function(p) {
                                     AndroidBridge.onVideoReceived("Processing video..."); 
                                     puter.ai.txt2vid(p).then(r => {
                                         AndroidBridge.onResponse('Video generation is not supported natively yet via Puter.js API.');
-                                    }).catch(e => AndroidBridge.onResponse('Error: ' + JSON.stringify(e)));
+                                    }).catch(e => { clearTimeout(timer); AndroidBridge.onResponse('Error: ' + JSON.stringify(e)); });
                                 };
                             </script></body></html>
                         """.trimIndent()

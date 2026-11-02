@@ -1,7 +1,7 @@
 package com.hiyako.app.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,26 +31,18 @@ import kotlinx.coroutines.delay
 @Composable
 fun AnimatedLoadingText(type: String) {
     var dotCount by remember { mutableIntStateOf(1) }
-    
     LaunchedEffect(Unit) {
         while (true) {
             delay(500)
             dotCount = if (dotCount == 3) 1 else dotCount + 1
         }
     }
-    
     val baseText = when (type) {
         "IMAGE" -> "Creating image"
         "VIDEO" -> "Generating video"
         else -> "Thinking"
     }
-    
-    Text(
-        text = "$baseText${".".repeat(dotCount)}",
-        color = TextSecondary,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.Medium
-    )
+    Text(text = "$baseText${".".repeat(dotCount)}", color = TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
 }
 
 @Composable
@@ -58,10 +50,10 @@ fun MessageBubble(
     text: String,
     isUser: Boolean,
     isLoading: Boolean = false,
-    type: String = "TEXT"
+    type: String = "TEXT",
+    onImageClick: (String) -> Unit = {}
 ) {
     val arrangement = if (isUser) Arrangement.End else Arrangement.Start
-
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = arrangement,
@@ -73,46 +65,33 @@ fun MessageBubble(
             }
             Spacer(Modifier.width(8.dp))
         }
-        Column(
-            modifier = Modifier.weight(1f, fill = false),
-            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
-        ) {
+        Column(modifier = Modifier.weight(1f, fill = false), horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
             Surface(
                 color = if (isUser) CardDark else Color.Transparent,
                 shape = RoundedCornerShape(topStart = if (isUser) 16.dp else 0.dp, topEnd = if (isUser) 0.dp else 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
             ) {
-                Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Box(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     if (isLoading) {
                         AnimatedLoadingText(type = type)
                     } else {
                         when (type) {
                             "IMAGE" -> {
-                                val imageModel: Any = if (text.startsWith("http") || text.startsWith("data:image")) {
-                                    text
-                                } else {
-                                    java.io.File(text)
-                                }
+                                val imageModel: Any = if (text.startsWith("http") || text.startsWith("data:image")) text else java.io.File(text)
                                 AsyncImage(
                                     model = imageModel,
                                     contentDescription = "Generated Image",
-                                    modifier = Modifier.size(250.dp).background(Color.DarkGray, RoundedCornerShape(8.dp)),
+                                    modifier = Modifier.size(250.dp).background(Color.DarkGray, RoundedCornerShape(8.dp)).clickable { onImageClick(text) },
                                     contentScale = ContentScale.Crop,
-                                    onError = { /* تجاهل الخطأ */ }
+                                    onError = { }
                                 )
                             }
-                            "VIDEO" -> {
-                                Text("Video generation is not supported natively yet.", color = TextPrimary, fontSize = 14.sp)
-                            }
-                            else -> {
-                                Text(
-                                    text = text.replace("**", "").replace("```", "").trim(), 
-                                    color = TextPrimary, 
-                                    fontSize = 15.sp, 
-                                    lineHeight = 22.sp, 
-                                    textAlign = if (isUser) TextAlign.End else TextAlign.Start, 
-                                    style = TextStyle(textDirection = TextDirection.Content)
-                                )
-                            }
+                            "VIDEO" -> Text("Video generation is not supported natively yet.", color = TextPrimary, fontSize = 14.sp)
+                            else -> Text(
+                                text = text.replace("**", "").replace("```", "").trim(), 
+                                color = TextPrimary, fontSize = 15.sp, lineHeight = 22.sp, 
+                                textAlign = if (isUser) TextAlign.End else TextAlign.Start, 
+                                style = TextStyle(textDirection = TextDirection.Content)
+                            )
                         }
                     }
                 }
@@ -139,9 +118,7 @@ fun ChatInputBar(input: String, onInputChange: (String) -> Unit, onSend: () -> U
 }
 
 @Composable
-fun EmptyStateGrid(
-    onActionClick: (String) -> Unit
-) {
+fun EmptyStateGrid(onActionClick: (String) -> Unit) {
     val actions = listOf(
         Triple("Build App", Icons.Default.Build, Color(0xFF2196F3)),
         Triple("Ghost Fix", Icons.Default.BugReport, Color(0xFFF44336)),
@@ -150,7 +127,6 @@ fun EmptyStateGrid(
         Triple("Deep Research", Icons.Default.Search, Color(0xFF4CAF50)),
         Triple("Writing", Icons.Default.Edit, Color(0xFFFF9800))
     )
-
     androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
         columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -164,11 +140,7 @@ fun EmptyStateGrid(
                 colors = CardDefaults.cardColors(containerColor = CardDark),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Icon(icon, null, tint = color, modifier = Modifier.size(36.dp))
                     Spacer(Modifier.height(12.dp))
                     Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
