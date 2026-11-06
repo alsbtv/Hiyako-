@@ -2,13 +2,16 @@ package com.hiyako.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -98,7 +101,7 @@ fun MessageBubble(
                                 AsyncImage(
                                     model = imageModel,
                                     contentDescription = "Generated Image",
-                                    modifier = Modifier.size(250.dp).clip(RoundedCornerShape(8.dp)),
+                                    modifier = Modifier.size(250.dp).clip(RoundedCornerShape(8.dp)).clickable { onImageClick(text) },
                                     contentScale = ContentScale.Crop
                                 )
                             }
@@ -174,6 +177,45 @@ fun ChatInputBar(
                         tint = if (input.isNotBlank()) NexusVoid else NexusText.copy(alpha = 0.5f),
                         modifier = Modifier.size(20.dp)
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyStateGrid(onActionClick: (String) -> Unit) {
+    val actions = listOf(
+        Triple("Build App", Icons.Default.Build, NexusCyan),
+        Triple("Ghost Fix", Icons.Default.BugReport, Color.Red),
+        Triple("Image", Icons.Default.Image, NexusMagenta),
+        Triple("Video", Icons.Default.VideoCall, Color(0xFF9C27B0)),
+        Triple("Deep Research", Icons.Default.Search, Color(0xFF4CAF50)),
+        Triple("Writing", Icons.Default.Edit, Color(0xFFFF9800))
+    )
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(actions.size) { index ->
+            val (title, icon, color) = actions[index]
+            Card(
+                modifier = Modifier.aspectRatio(1.2f).clickable { onActionClick(title) },
+                colors = CardDefaults.cardColors(containerColor = NexusGlass),
+                border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.3f)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(icon, null, tint = color, modifier = Modifier.size(36.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(title, color = NexusText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
