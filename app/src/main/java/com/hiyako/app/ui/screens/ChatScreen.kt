@@ -23,7 +23,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,13 +79,13 @@ fun ChatScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = OledBlack, modifier = Modifier.width(280.dp)) {
+            ModalDrawerSheet(drawerContainerColor = Color(0xFF0A0E1F), modifier = Modifier.width(280.dp)) {
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
                     OutlinedTextField(
                         value = "", onValueChange = {}, placeholder = { Text("Search chat content...", color = TextSecondary, fontSize = 14.sp) },
                         modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(24.dp),
                         colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = CardDark, unfocusedBorderColor = Color.Transparent),
-                        leadingIcon = { Icon(Icons.Default.Search, null, tint = TextSecondary, modifier = Modifier.size(20.dp)) }
+                        leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp)) }
                     )
                     Spacer(Modifier.height(16.dp))
                     
@@ -102,7 +104,7 @@ fun ChatScreen(
                         scope.launch { drawerState.close() }
                         onNavigateToWorkspace() 
                     }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Folder, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Folder, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(12.dp))
                         Text("Workspace (GitHub)", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
@@ -111,7 +113,7 @@ fun ChatScreen(
                         scope.launch { drawerState.close() }
                         onNavigateToUpdater() 
                     }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Update, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Update, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(12.dp))
                         Text("Update App", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
@@ -121,7 +123,7 @@ fun ChatScreen(
                         showLoginView = true 
                         webView?.evaluateJavascript("window.startSignIn();", null)
                     }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccountCircle, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.AccountCircle, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(12.dp))
                         Text("Puter Account / Sign In", color = TextPrimary, fontSize = 15.sp)
                     }
@@ -132,29 +134,29 @@ fun ChatScreen(
                         Box(Modifier.size(32.dp).background(TextSecondary, CircleShape), contentAlignment = Alignment.Center) { Text("W", color = Color.Black, fontSize = 14.sp) }
                         Spacer(Modifier.width(12.dp))
                         Text("بسام هرار", color = TextPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                        Icon(Icons.Default.MoreVert, null, tint = TextPrimary, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.MoreVert, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
                     }
                 }
             }
         }
     ) {
         Scaffold(
-            containerColor = OledBlack,
+            containerColor = Color.Transparent,
             modifier = Modifier.imePadding().fillMaxSize(),
             topBar = {
                 if (!showLoginView) {
                     Column {
                         Row(Modifier.fillMaxWidth().padding(top = 16.dp, start = 12.dp, end = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { 
-                                Icon(Icons.Default.Menu, null, tint = TextPrimary, modifier = Modifier.size(24.dp)) 
+                                Icon(Icons.Default.Menu, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(24.dp)) 
                             }
-                            Text(chatTitle, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(chatTitle, color = Color(0xFF00E5FF), fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             
                             IconButton(onClick = { 
                                 showLoginView = true 
                                 webView?.evaluateJavascript("window.startSignIn();", null)
                             }, modifier = Modifier.size(36.dp)) { 
-                                Icon(Icons.Default.AccountCircle, null, tint = TextPrimary, modifier = Modifier.size(24.dp)) 
+                                Icon(Icons.Default.AccountCircle, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(24.dp)) 
                             }
                         }
                         
@@ -191,7 +193,7 @@ fun ChatScreen(
                 }
             }
         ) { padding ->
-            Box(Modifier.padding(padding).fillMaxSize()) {
+            Box(Modifier.padding(padding).fillMaxSize().background(Brush.radialGradient(listOf(Color(0xFF1A1040), Color(0xFF05060F))))) {
                 if (!showLoginView) {
                     if (messages.isEmpty()) {
                         EmptyStateGrid { action ->
