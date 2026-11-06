@@ -29,11 +29,17 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 
 // ألوان Deep Core
-val NexusVoid = Color(0xFF05060F)
-val NexusCyan = Color(0xFF00E5FF)
-val NexusMagenta = Color(0xFFFF3DCB)
+val DeepVoid = Color(0xFF05060F)
+val DeepSurface = Color(0xFF12141D)
+val AccentCyan = Color(0xFF00E5FF)
+val AccentPink = Color(0xFFFF3DCB)
+val TextWhite = Color(0xFFF0F0F5)
+val TextDim = Color(0xFF9E9EAF)
+val NexusVoid = DeepVoid
+val NexusCyan = AccentCyan
+val NexusMagenta = AccentPink
 val NexusGlass = Color(0x331A2147)
-val NexusText = Color(0xFFEAF2FF)
+val NexusText = TextWhite
 
 @Composable
 fun AnimatedLoadingText(type: String) {
@@ -79,17 +85,8 @@ fun MessageBubble(
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
             Surface(
-                color = NexusGlass,
-                shape = RoundedCornerShape(
-                    topStart = if (isUser) 20.dp else 4.dp,
-                    topEnd = if (isUser) 4.dp else 20.dp,
-                    bottomStart = 20.dp,
-                    bottomEnd = 20.dp
-                ),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (isUser) NexusCyan.copy(alpha = 0.5f) else NexusMagenta.copy(alpha = 0.5f)
-                )
+                color = if (isUser) NexusCyan.copy(alpha = 0.12f) else DeepSurface,
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                     if (isLoading) {
@@ -107,7 +104,7 @@ fun MessageBubble(
                             }
                             else -> Text(
                                 text = text.replace("**", "").replace("```", "").trim(),
-                                color = NexusText, fontSize = 15.sp, lineHeight = 22.sp,
+                                color = if (isUser) NexusCyan else TextWhite, fontSize = 15.sp, lineHeight = 22.sp,
                                 textAlign = if (isUser) TextAlign.End else TextAlign.Start,
                                 style = TextStyle(textDirection = TextDirection.Content)
                             )
@@ -134,8 +131,8 @@ fun ChatInputBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(NexusGlass, RoundedCornerShape(30.dp))
-                .border(1.dp, NexusCyan.copy(alpha = 0.3f), RoundedCornerShape(30.dp))
+                .imePadding()
+                .background(DeepSurface, RoundedCornerShape(32.dp))
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -166,9 +163,10 @@ fun ChatInputBar(
                 FilledIconButton(
                     onClick = onSend,
                     enabled = input.isNotBlank(),
-                    modifier = Modifier.size(42.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = if (input.isNotBlank()) NexusCyan else Color.Transparent
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.Transparent),
+                    modifier = Modifier.size(42.dp).background(
+                        if (input.isNotBlank()) Brush.linearGradient(listOf(NexusCyan, NexusMagenta)) else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)),
+                        CircleShape
                     )
                 ) {
                     Icon(
@@ -204,8 +202,7 @@ fun EmptyStateGrid(onActionClick: (String) -> Unit) {
             val (title, icon, color) = actions[index]
             Card(
                 modifier = Modifier.aspectRatio(1.2f).clickable { onActionClick(title) },
-                colors = CardDefaults.cardColors(containerColor = NexusGlass),
-                border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.3f)),
+                colors = CardDefaults.cardColors(containerColor = DeepSurface),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
@@ -213,9 +210,14 @@ fun EmptyStateGrid(onActionClick: (String) -> Unit) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(icon, null, tint = color, modifier = Modifier.size(36.dp))
+                    Box(
+                        modifier = Modifier.size(56.dp).background(color.copy(alpha = 0.15f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(icon, null, tint = color, modifier = Modifier.size(32.dp))
+                    }
                     Spacer(Modifier.height(12.dp))
-                    Text(title, color = NexusText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(title, color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

@@ -79,7 +79,7 @@ fun ChatScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = Color(0xFF0A0E1F), modifier = Modifier.width(280.dp)) {
+            ModalDrawerSheet(drawerContainerColor = Color(0xFF05060F), modifier = Modifier.width(280.dp)) {
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
                     OutlinedTextField(
                         value = "", onValueChange = {}, placeholder = { Text("Search chat content...", color = TextSecondary, fontSize = 14.sp) },
@@ -148,15 +148,15 @@ fun ChatScreen(
                     Column {
                         Row(Modifier.fillMaxWidth().padding(top = 16.dp, start = 12.dp, end = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { 
-                                Icon(Icons.Default.Menu, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(24.dp)) 
+                                Icon(Icons.Default.Menu, null, tint = Color.White, modifier = Modifier.size(24.dp)) 
                             }
-                            Text(chatTitle, color = Color(0xFF00E5FF), fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(chatTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             
                             IconButton(onClick = { 
                                 showLoginView = true 
                                 webView?.evaluateJavascript("window.startSignIn();", null)
                             }, modifier = Modifier.size(36.dp)) { 
-                                Icon(Icons.Default.AccountCircle, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(24.dp)) 
+                                Icon(Icons.Default.AccountCircle, null, tint = Color.White, modifier = Modifier.size(24.dp)) 
                             }
                         }
                         
@@ -193,7 +193,7 @@ fun ChatScreen(
                 }
             }
         ) { padding ->
-            Box(Modifier.padding(padding).fillMaxSize().background(Brush.radialGradient(listOf(Color(0xFF1A1040), Color(0xFF05060F))))) {
+            Box(Modifier.padding(padding).fillMaxSize().background(Brush.radialGradient(listOf(Color(0xFF1A1030), Color(0xFF05060F))))) {
                 if (!showLoginView) {
                     if (messages.isEmpty()) {
                         EmptyStateGrid { action ->
