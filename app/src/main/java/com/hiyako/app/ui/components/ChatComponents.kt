@@ -8,12 +8,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
@@ -55,6 +55,8 @@ fun MessageBubble(
     isUser: Boolean,
     isLoading: Boolean = false,
     type: String = "TEXT",
+    hasCodeChanges: Boolean = false,
+    onApplyChanges: (String) -> Unit = {},
     onImageClick: (String) -> Unit = {}
 ) {
     val arrangement = if (isUser) Arrangement.End else Arrangement.Start
@@ -119,7 +121,8 @@ fun ChatInputBar(
     input: String,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
-    isLoading: Boolean
+    isLoading: Boolean,
+    onStop: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -147,20 +150,31 @@ fun ChatInputBar(
                     }
                 }
             )
-            FilledIconButton(
-                onClick = onSend,
-                enabled = input.isNotBlank() && !isLoading,
-                modifier = Modifier.size(42.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = if (input.isNotBlank()) NexusCyan else Color.Transparent
-                )
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    tint = if (input.isNotBlank()) NexusVoid else NexusText.copy(alpha = 0.5f),
-                    modifier = Modifier.size(20.dp)
-                )
+            
+            if (isLoading) {
+                FilledIconButton(
+                    onClick = onStop,
+                    modifier = Modifier.size(42.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.Red)
+                ) {
+                    Icon(Icons.Default.Stop, contentDescription = "Stop", tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+            } else {
+                FilledIconButton(
+                    onClick = onSend,
+                    enabled = input.isNotBlank(),
+                    modifier = Modifier.size(42.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = if (input.isNotBlank()) NexusCyan else Color.Transparent
+                    )
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send",
+                        tint = if (input.isNotBlank()) NexusVoid else NexusText.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
