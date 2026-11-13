@@ -12,11 +12,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import com.hiyako.app.ui.screens.ChatScreen
-import com.hiyako.app.ui.screens.UpdaterScreen
-import com.hiyako.app.ui.screens.WorkspaceScreen
+import com.hiyako.app.ui.screens.*
 import com.hiyako.app.ui.theme.AppTheme
 import com.hiyako.app.ui.theme.OledBlack
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,26 +32,33 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize(), color = OledBlack) {
                     var screenState by remember { mutableStateOf("chat") }
                     var refreshChatTrigger by remember { mutableIntStateOf(0) }
+                    val aiViewModel: AiViewModel = viewModel()
                     
                     when (screenState) {
                         "workspace" -> {
                             WorkspaceScreen(
-                                onBack = { screenState = "chat" },
-                                onRepoSelected = { 
-                                    screenState = "chat"
-                                    refreshChatTrigger++
-                                },
+                                onBack = { screenState = "settings" },
+                                onRepoSelected = { screenState = "chat"; refreshChatTrigger++ },
                                 onNavigateToUpdater = { screenState = "updater" }
                             )
                         }
                         "updater" -> {
-                            UpdaterScreen(onBack = { screenState = "workspace" })
+                            UpdaterScreen(onBack = { screenState = "settings" })
+                        }
+                        "settings" -> {
+                            SettingsScreen(
+                                onBack = { screenState = "chat" },
+                                onNavigateToWorkspace = { screenState = "workspace" },
+                                onNavigateToUpdater = { screenState = "updater" },
+                                onSignIn = { screenState = "chat" },
+                                onClearChat = { aiViewModel.clearChat() }
+                            )
                         }
                         else -> {
                             key(refreshChatTrigger) {
                                 ChatScreen(
-                                    onNavigateToWorkspace = { screenState = "workspace" },
-                                    onNavigateToUpdater = { screenState = "updater" }
+                                    onNavigateToSettings = { screenState = "settings" },
+                                    vm = aiViewModel
                                 )
                             }
                         }
