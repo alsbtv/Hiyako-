@@ -23,296 +23,157 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hiyako.app.data.WorkspaceManager
+import com.hiyako.app.data.db.ConversationEntity
 import com.hiyako.app.ui.components.ChatInputBar
-import com.hiyako.app.ui.components.EmptyStateGrid
 import com.hiyako.app.ui.components.MessageBubble
+import com.hiyako.app.ui.components.AttachmentSheet
 import com.hiyako.app.ui.theme.*
 import kotlinx.coroutines.launch
+import java.util.*
 
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    onNavigateToWorkspace: () -> Unit = {},
-    onNavigateToUpdater: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     vm: AiViewModel = viewModel()
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
     val messages by vm.messages.collectAsState()
-    val selectedModel by vm.selectedModel.collectAsState()
-    val filteredModels by vm.filteredModels.collectAsState()
-    val isBuilding by vm.isBuilding.collectAsState()
+    val conversations by vm.conversations.collectAsState()
     val chatTitle by vm.chatTitle.collectAsState()
     val isAnyLoading = messages.any { it.isLoading }
+    val activeConversationId by vm.activeConversationId.collectAsState()
     
     var webView by remember { mutableStateOf<WebView?>(null) }
-    var showModelSheet by remember { mutableStateOf(false) }
-    var searchModelQuery by remember { mutableStateOf("") }
+    var showAttachmentSheet by remember { mutableStateOf(false) }
     var showLoginView by remember { mutableStateOf(false) }
-    var forceType by remember { mutableStateOf<String?>(null) }
-    
-    var showAgentConfig by remember { mutableStateOf(false) }
-    var appIdeaInput by remember { mutableStateOf("") }
-    var agentsInput by remember { mutableStateOf("Architect, UI Designer, Logic Developer, Reviewer") }
-
-    var showGhostModeInput by remember { mutableStateOf(false) }
-    var ghostErrorInput by remember { mutableStateOf("") }
 
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
-        }
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = Color(0xFF05060F), modifier = Modifier.width(280.dp)) {
+            ModalDrawerSheet(drawerContainerColor = DeepSurface, modifier = Modifier.width(300.dp)) {
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
                     OutlinedTextField(
-                        value = "", onValueChange = {}, placeholder = { Text("Search chat content...", color = TextSecondary, fontSize = 14.sp) },
-                        modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(24.dp),
+                        value = "", onValueChange = {}, placeholder = { Text("Search...", color = TextMuted, fontSize = 14.sp) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(24.dp),
                         colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = CardDark, unfocusedBorderColor = Color.Transparent),
-                        leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp)) }
+                        leadingIcon = { Icon(Icons.Default.Search, null, tint = TextSecondary, modifier = Modifier.size(20.dp)) }
                     )
                     Spacer(Modifier.height(16.dp))
                     
-                    // زر مسح المحادثة الجديد
                     Row(Modifier.fillMaxWidth().clickable { 
+                        vm.createNewConversation()
                         scope.launch { drawerState.close() }
-                        vm.clearChat() 
                     }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Delete, null, tint = Color.Red, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Add, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(12.dp))
-                        Text("Clear Chat History", color = Color.Red, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text("New Chat", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
-                    Divider(color = CardDark)
+                    Divider(color = BorderColor)
 
-                    Row(Modifier.fillMaxWidth().clickable { 
-                        scope.launch { drawerState.close() }
-                        onNavigateToWorkspace() 
-                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Folder, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text("Workspace (GitHub)", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    }
-                    
-                    Row(Modifier.fillMaxWidth().clickable { 
-                        scope.launch { drawerState.close() }
-                        onNavigateToUpdater() 
-                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Update, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text("Update App", color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    }
-                    
-                    Row(Modifier.fillMaxWidth().clickable { 
-                        scope.launch { drawerState.close() }
-                        showLoginView = true 
-                        webView?.evaluateJavascript("window.startSignIn();", null)
-                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccountCircle, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text("Puter Account / Sign In", color = TextPrimary, fontSize = 15.sp)
+                    LazyColumn(Modifier.weight(1f)) {
+                        val grouped = conversations.groupBy { getGroupName(it.timestamp) }
+                        grouped.forEach { (groupName, chats) ->
+                            item { Text(groupName, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp)) }
+                            items(chats) { chat ->
+                                Row(Modifier.fillMaxWidth().clickable { 
+                                    vm.selectConversation(chat.id)
+                                    scope.launch { drawerState.close() }
+                                }.padding(vertical = 12.dp, horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(chat.title, color = TextPrimary, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                                    if (activeConversationId == chat.id) {
+                                        Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    Spacer(Modifier.weight(1f))
-                    Divider(color = CardDark)
-                    Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Divider(color = BorderColor)
+                    Row(Modifier.fillMaxWidth().clickable { 
+                        scope.launch { drawerState.close() }
+                        onNavigateToSettings() 
+                    }.padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(32.dp).background(TextSecondary, CircleShape), contentAlignment = Alignment.Center) { Text("W", color = Color.Black, fontSize = 14.sp) }
                         Spacer(Modifier.width(12.dp))
-                        Text("بسام هرار", color = TextPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                        Icon(Icons.Default.MoreVert, null, tint = Color(0xFF00E5FF), modifier = Modifier.size(20.dp))
+                        Text("Settings", color = TextPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.Settings, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
                     }
                 }
             }
         }
     ) {
         Scaffold(
-            containerColor = Color.Transparent,
+            containerColor = OledBlack,
             modifier = Modifier.imePadding().fillMaxSize(),
             topBar = {
                 if (!showLoginView) {
-                    Column {
-                        Row(Modifier.fillMaxWidth().padding(top = 16.dp, start = 12.dp, end = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { 
-                                Icon(Icons.Default.Menu, null, tint = Color.White, modifier = Modifier.size(24.dp)) 
-                            }
-                            Text(chatTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                            
-                            IconButton(onClick = { 
-                                showLoginView = true 
-                                webView?.evaluateJavascript("window.startSignIn();", null)
-                            }, modifier = Modifier.size(36.dp)) { 
-                                Icon(Icons.Default.AccountCircle, null, tint = Color.White, modifier = Modifier.size(24.dp)) 
-                            }
+                    Row(Modifier.fillMaxWidth().padding(top = 16.dp, start = 12.dp, end = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { 
+                            Icon(Icons.Default.Menu, null, tint = Color.White, modifier = Modifier.size(24.dp)) 
                         }
-                        
-                        if (isBuilding) {
-                            Row(Modifier.fillMaxWidth().background(CardDark).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(color = AccentBlue, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Uploading changes to GitHub...", color = AccentBlue, fontSize = 12.sp)
-                            }
-                        } else if (WorkspaceManager.isLoaded) {
-                            Row(Modifier.fillMaxWidth().background(CardDark).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Folder, null, tint = AccentBlue, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Active: ${WorkspaceManager.activeRepo}", color = AccentBlue, fontSize = 12.sp)
-                            }
+                        Text(chatTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        IconButton(onClick = { 
+                            showLoginView = true 
+                            webView?.evaluateJavascript("window.startSignIn();", null)
+                        }, modifier = Modifier.size(36.dp)) { 
+                            Icon(Icons.Default.AccountCircle, null, tint = Color.White, modifier = Modifier.size(24.dp)) 
                         }
                     }
                 }
             },
             bottomBar = {
                 if (!showLoginView) {
-                    Column(Modifier.padding(bottom = 4.dp)) {
-                        ChatInputBar(input = input, onInputChange = { input = it }, onSend = { vm.sendMessage(input, webView, forceType); input = ""; forceType = null }, onStop = { vm.stopGeneration() }, isLoading = isAnyLoading)
-                        Spacer(Modifier.height(4.dp))
-                        Row(Modifier.padding(horizontal = 12.dp)) {
-                            AssistChip(
-                                onClick = { showModelSheet = true }, 
-                                label = { Text(selectedModel.name, color = AccentBlue, fontSize = 12.sp) }, 
-                                leadingIcon = { Icon(Icons.Default.Language, null, tint = AccentBlue, modifier = Modifier.size(14.dp)) },
-                                modifier = Modifier.height(28.dp)
-                            )
-                        }
-                    }
+                    ChatInputBar(
+                        input = input, 
+                        onInputChange = { input = it }, 
+                        onSend = { 
+                            vm.sendMessage(input, webView)
+                            input = "" 
+                        }, 
+                        onStop = { vm.stopGeneration() }, 
+                        isLoading = isAnyLoading,
+                        onAttachClick = { showAttachmentSheet = true }
+                    )
                 }
             }
         ) { padding ->
-            Box(Modifier.padding(padding).fillMaxSize().background(Brush.radialGradient(listOf(Color(0xFF1A1030), Color(0xFF05060F))))) {
+            Box(Modifier.padding(padding).fillMaxSize().background(OledBlack)) {
                 if (!showLoginView) {
                     if (messages.isEmpty()) {
-                        EmptyStateGrid { action ->
-                            when(action) {
-                                "Build App" -> {
-                                    appIdeaInput = "Build an app that "
-                                    showAgentConfig = true
-                                }
-                                "Ghost Fix" -> {
-                                    showGhostModeInput = true
-                                }
-                                "Image" -> {
-                                    forceType = "IMAGE"
-                                    input = "Generate an image of "
-                                }
-                                "Video" -> {
-                                    forceType = "VIDEO"
-                                    input = "Generate a video of "
-                                }
-                                "Deep Research" -> input = "Do deep research on "
-                                "Writing" -> input = "Write me an article about "
-                            }
+                        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Text("كيف أساعدك اليوم؟", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Medium)
                         }
                     } else {
                         LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 4.dp)) {
                             items(messages) { msg ->
-                                MessageBubble(
-                                    text = msg.content, 
-                                    isUser = msg.isUser, 
-                                    isLoading = msg.isLoading,
-                                    type = msg.type
-                                )
+                                MessageBubble(text = msg.content, isUser = msg.isUser, isLoading = msg.isLoading, type = msg.type)
                             }
                         }
                     }
                 }
 
-                if (showAgentConfig) {
-                    AlertDialog(
-                        onDismissRequest = { showAgentConfig = false },
-                        title = { Text("Configure AI Agents", color = TextPrimary) },
-                        text = {
-                            Column {
-                                Text("App Idea:", color = TextSecondary, fontSize = 14.sp)
-                                OutlinedTextField(
-                                    value = appIdeaInput,
-                                    onValueChange = { appIdeaInput = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = CardDark, unfocusedContainerColor = CardDark, focusedBorderColor = AccentBlue)
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text("AI Agents (comma separated):", color = TextSecondary, fontSize = 14.sp)
-                                OutlinedTextField(
-                                    value = agentsInput,
-                                    onValueChange = { agentsInput = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = CardDark, unfocusedContainerColor = CardDark, focusedBorderColor = AccentBlue)
-                                )
-                            }
-                        },
-                        confirmButton = {
-                            Button(
-                                onClick = {
-                                    val roles = agentsInput.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                                    vm.startMultiAgent(appIdeaInput, roles, webView)
-                                    showAgentConfig = false
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
-                            ) {
-                                Text("Start Team")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showAgentConfig = false }) {
-                                Text("Cancel", color = TextSecondary)
-                            }
-                        },
-                        containerColor = OledBlack
-                    )
-                }
-
-                if (showGhostModeInput) {
-                    AlertDialog(
-                        onDismissRequest = { showGhostModeInput = false },
-                        title = { Text("Ghost Mode (Auto-Fix)", color = TextPrimary) },
-                        text = {
-                            Column {
-                                Text("Paste the build error log below:", color = TextSecondary, fontSize = 14.sp)
-                                Spacer(Modifier.height(8.dp))
-                                OutlinedTextField(
-                                    value = ghostErrorInput,
-                                    onValueChange = { ghostErrorInput = it },
-                                    modifier = Modifier.fillMaxWidth().height(150.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = CardDark,
-                                        unfocusedContainerColor = CardDark,
-                                        focusedBorderColor = AccentBlue
-                                    )
-                                )
-                            }
-                        },
-                        confirmButton = {
-                            Button(
-                                onClick = {
-                                    vm.startGhostMode(ghostErrorInput, webView)
-                                    showGhostModeInput = false
-                                    ghostErrorInput = ""
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
-                            ) {
-                                Text("Fix Code")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showGhostModeInput = false }) {
-                                Text("Cancel", color = TextSecondary)
-                            }
-                        },
-                        containerColor = OledBlack
+                if (showAttachmentSheet) {
+                    AttachmentSheet(
+                        onCameraClick = { showAttachmentSheet = false },
+                        onPhotoClick = { showAttachmentSheet = false },
+                        onDocumentClick = { showAttachmentSheet = false },
+                        onDismiss = { showAttachmentSheet = false }
                     )
                 }
 
@@ -323,22 +184,14 @@ fun ChatScreen(
                         settings.domStorageEnabled = true
                         settings.javaScriptCanOpenWindowsAutomatically = true
                         settings.setSupportMultipleWindows(true)
-                        
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean { return false }
                         }
-                        
                         webChromeClient = object : WebChromeClient() {
                             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
                                 val context = view?.context ?: return false
                                 val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
-                                val popupWebView = WebView(context).apply {
-                                    settings.javaScriptEnabled = true
-                                    settings.domStorageEnabled = true
-                                    webViewClient = object : WebViewClient() {
-                                        override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean { return false }
-                                    }
-                                }
+                                val popupWebView = WebView(context).apply { settings.javaScriptEnabled = true; settings.domStorageEnabled = true }
                                 val dialog = Dialog(context).apply {
                                     setContentView(popupWebView)
                                     window?.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
@@ -350,68 +203,20 @@ fun ChatScreen(
                                 return true
                             }
                         }
-                        
                         addJavascriptInterface(AiBridge(vm), "AndroidBridge")
                         val html = """
-                            <html><head><script src='https://js.puter.com/v2/'></script></head><body style="background: #0F0F0F; color: white;">
+                            <html><head><script src='https://js.puter.com/v2/'></script></head><body>
                             <script>
-                                window.onload = function() {
-                                    let check = setInterval(() => { if (typeof puter !== 'undefined') { clearInterval(check); AndroidBridge.onReady(); window.fetchModels(); } }, 500);
-                                };
-                                window.startSignIn = function() {
-                                    puter.auth.signIn().then(() => {
-                                        AndroidBridge.onResponse('Signed in successfully!');
-                                        window.fetchModels();
-                                    }).catch(e => {
-                                        AndroidBridge.onResponse('Sign in error: ' + JSON.stringify(e));
-                                    });
-                                };
-                                window.fetchModels = function() {
-                                    puter.ai.listModels().then(models => {
-                                        let result = models.map(m => ({ id: m.id, name: m.name || m.id }));
-                                        AndroidBridge.onModelsReceived(JSON.stringify(result));
-                                    }).catch(e => AndroidBridge.onModelsReceived("[]"));
-                                };
-                                window.classifyIntent = function(p) {
-                                    let timer = setTimeout(() => { AndroidBridge.onIntentClassified("TEXT"); }, 15000);
-                                    let prompt = "Classify the following user request into one of these exact categories: IMAGE, VIDEO, TEXT. Output ONLY the category name. Do not add any other text or punctuation.\n\nRequest: " + p;
-                                    puter.ai.chat(prompt, {model: 'claude-3-haiku-20240307'})
-                                        .then(r => {
-                                            clearTimeout(timer);
-                                            let res = (typeof r === 'string') ? r : (r.message ? r.message.content : (r.result ? r.result.message.content : 'TEXT'));
-                                            let clean = res.trim().toUpperCase();
-                                            if (clean.includes('IMAGE')) clean = 'IMAGE';
-                                            else if (clean.includes('VIDEO')) clean = 'VIDEO';
-                                            else clean = 'TEXT';
-                                            AndroidBridge.onIntentClassified(clean);
-                                        }).catch(e => { clearTimeout(timer); AndroidBridge.onIntentClassified("TEXT"); });
-                                };
+                                window.onload = function() { let check = setInterval(() => { if (typeof puter !== 'undefined') { clearInterval(check); AndroidBridge.onReady(); window.fetchModels(); } }, 500); };
+                                window.startSignIn = function() { puter.auth.signIn().then(() => { AndroidBridge.onResponse('Signed in!'); window.fetchModels(); }).catch(e => {}); };
+                                window.fetchModels = function() { puter.ai.listModels().then(models => { let result = models.map(m => ({ id: m.id, name: m.name || m.id })); AndroidBridge.onModelsReceived(JSON.stringify(result)); }).catch(e => AndroidBridge.onModelsReceived("[]")); };
                                 window.askPuter = function(p, m) {
-                                    let timer = setTimeout(() => { AndroidBridge.onResponse("Error: Timeout. Model took too long."); }, 60000);
+                                    let timer = setTimeout(() => { AndroidBridge.onResponse("Error: Timeout."); }, 60000);
                                     let opts = { stream: false };
                                     if (m && m !== "") opts.model = m;
-                                    puter.ai.chat(p, opts)
-                                        .then(r => {
-                                            clearTimeout(timer);
-                                            let text = (typeof r === 'string') ? r : (r.message ? r.message.content : (r.result ? r.result.message.content : JSON.stringify(r)));
-                                            AndroidBridge.onResponse(text);
-                                        }).catch(e => { clearTimeout(timer); AndroidBridge.onResponse('Error: ' + JSON.stringify(e)); });
+                                    puter.ai.chat(p, opts).then(r => { clearTimeout(timer); let text = (typeof r === 'string') ? r : (r.message ? r.message.content : JSON.stringify(r)); AndroidBridge.onResponse(text); }).catch(e => { clearTimeout(timer); AndroidBridge.onResponse('Error: ' + JSON.stringify(e)); });
                                 };
-                                window.generateImage = function(p) {
-                                    puter.ai.txt2img(p).then(r => {
-                                        if (r && r.src && typeof r.src === 'string') {
-                                            AndroidBridge.onImageReceived(r.src);
-                                        } else {
-                                            AndroidBridge.onResponse('Error: Image generation failed or returned invalid URL.');
-                                        }
-                                    }).catch(e => { clearTimeout(timer); AndroidBridge.onResponse('Error: ' + JSON.stringify(e)); });
-                                };
-                                window.generateVideo = function(p) {
-                                    AndroidBridge.onVideoReceived("Processing video..."); 
-                                    puter.ai.txt2vid(p).then(r => {
-                                        AndroidBridge.onResponse('Video generation is not supported natively yet via Puter.js API.');
-                                    }).catch(e => { clearTimeout(timer); AndroidBridge.onResponse('Error: ' + JSON.stringify(e)); });
-                                };
+                                window.generateImage = function(p) { puter.ai.txt2img(p).then(r => { if (r && r.src && typeof r.src === 'string') { AndroidBridge.onImageReceived(r.src); } else { AndroidBridge.onResponse('Error: Image failed.'); } }).catch(e => AndroidBridge.onResponse('Error: ' + JSON.stringify(e))); };
                             </script></body></html>
                         """.trimIndent()
                         loadDataWithBaseURL("https://appassets.androidplatform.net", html, "text/html", "UTF-8", null)
@@ -421,36 +226,31 @@ fun ChatScreen(
                 )
 
                 if (showLoginView) {
-                    IconButton(
-                        onClick = { showLoginView = false },
-                        modifier = Modifier.align(Alignment.TopEnd).padding(24.dp).background(CardDark, CircleShape)
-                    ) {
+                    IconButton(onClick = { showLoginView = false }, modifier = Modifier.align(Alignment.TopEnd).padding(24.dp).background(CardDark, CircleShape)) {
                         Icon(Icons.Default.Close, null, tint = Color.White)
-                    }
-                }
-
-                if (showModelSheet) {
-                    ModalBottomSheet(onDismissRequest = { showModelSheet = false }, containerColor = CardDark) {
-                        Column(Modifier.padding(16.dp).fillMaxHeight(0.8f)) {
-                            Text("Select Model (500+)", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                            OutlinedTextField(
-                                value = searchModelQuery, 
-                                onValueChange = { searchModelQuery = it; vm.filterModels(it) }, 
-                                placeholder = { Text("Search models...", color = TextSecondary, fontSize = 14.sp) }, 
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            LazyColumn {
-                                items(filteredModels) { model ->
-                                    Row(Modifier.fillMaxWidth().clickable { vm.selectModel(model); showModelSheet = false }.padding(vertical = 12.dp, horizontal = 4.dp)) { 
-                                        Text(model.name, color = TextPrimary, fontSize = 15.sp) 
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
         }
     }
+}
+
+fun getGroupName(timestamp: Long): String {
+    val now = Calendar.getInstance()
+    val msgDate = Calendar.getInstance().apply { timeInMillis = timestamp }
+    
+    val isToday = now.get(Calendar.YEAR) == msgDate.get(Calendar.YEAR) && now.get(Calendar.DAY_OF_YEAR) == msgDate.get(Calendar.DAY_OF_YEAR)
+    if (isToday) return "Today"
+    
+    now.add(Calendar.DAY_OF_YEAR, -1)
+    val isYesterday = now.get(Calendar.YEAR) == msgDate.get(Calendar.YEAR) && now.get(Calendar.DAY_OF_YEAR) == msgDate.get(Calendar.DAY_OF_YEAR)
+    if (isYesterday) return "Yesterday"
+    
+    now.add(Calendar.DAY_OF_YEAR, -6)
+    if (msgDate.after(now)) return "7 Days"
+    
+    now.add(Calendar.DAY_OF_YEAR, -23)
+    if (msgDate.after(now)) return "30 Days"
+    
+    return "Older"
 }

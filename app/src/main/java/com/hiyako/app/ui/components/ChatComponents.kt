@@ -1,16 +1,19 @@
 package com.hiyako.app.ui.components
 
+import android.net.Uri
+import android.provider.MediaStore
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -30,7 +34,7 @@ import com.hiyako.app.ui.theme.*
 import kotlinx.coroutines.delay
 
 @Composable
-fun AnimatedLoadingText(type: String) {
+fun AnimatedLoadingText() {
     var dotCount by remember { mutableIntStateOf(1) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -38,12 +42,7 @@ fun AnimatedLoadingText(type: String) {
             dotCount = if (dotCount == 3) 1 else dotCount + 1
         }
     }
-    val baseText = when (type) {
-        "IMAGE" -> "Creating image"
-        "VIDEO" -> "Generating video"
-        else -> "Thinking"
-    }
-    Text(text = "$baseText${".".repeat(dotCount)}", color = AccentBlue, fontSize = 14.sp)
+    Text(text = "Thinking${".".repeat(dotCount)}", color = AccentBlue, fontSize = 14.sp)
 }
 
 @Composable
@@ -51,53 +50,70 @@ fun MessageBubble(
     text: String,
     isUser: Boolean,
     isLoading: Boolean = false,
-    type: String = "TEXT",
-    hasCodeChanges: Boolean = false,
-    onApplyChanges: (String) -> Unit = {},
-    onImageClick: (String) -> Unit = {}
+    type: String = "TEXT"
 ) {
-    val arrangement = if (isUser) Arrangement.End else Arrangement.Start
+    var isThinkingExpanded by remember { mutableStateOf(false) }
+    val hasThinkingBlock = !isUser && text.length > 100 && !isLoading
+
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = arrangement,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Top
     ) {
-        if (!isUser) {
-            Box(Modifier.size(28.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
-                Text("N", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(10.dp))
-        }
         Column(
             modifier = Modifier.weight(1f, fill = false),
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
-            Surface(
-                color = if (isUser) UserBubble else Color.Transparent,
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Box(Modifier.padding(horizontal = if (isUser) 16.dp else 0.dp, vertical = if (isUser) 10.dp else 0.dp)) {
-                    if (isLoading) {
-                        AnimatedLoadingText(type = type)
-                    } else {
-                        when (type) {
-                            "IMAGE" -> {
-                                val imageModel: Any = if (text.startsWith("http") || text.startsWith("data:image")) text else java.io.File(text)
-                                AsyncImage(
-                                    model = imageModel,
-                                    contentDescription = "Generated Image",
-                                    modifier = Modifier.size(250.dp).clip(RoundedCornerShape(12.dp)).clickable { onImageClick(text) },
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
-                            else -> Text(
-                                text = text.replace("**", "").replace("```", "").trim(),
-                                color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp,
-                                textAlign = if (isUser) TextAlign.End else TextAlign.Start,
-                                style = TextStyle(textDirection = TextDirection.Content)
-                            )
+            if (isLoading) {
+                AnimatedLoadingText()
+            } else if (isUser) {
+                Surface(color = UserBubble, shape = RoundedCornerShape(20.dp)) {
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        Text(
+                            text = text,
+                            color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp,
+                            textAlign = TextAlign.End,
+                            style = TextStyle(textDirection = TextDirection.Content)
+                        )
+                    }
+                }
+            } else {
+                if (hasThinkingBlock) {
+                    Row(
+                        modifier = Modifier.clickable { isThinkingExpanded = !isThinkingExpanded }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Thinking", color = TextSecondary, fontSize = 14.sp)
+                        Icon(
+                            if (isThinkingExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null, tint = TextSecondary, modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    if (isThinkingExpanded) {
+                        Row(Modifier.padding(bottom = 8.dp)) {
+                            Box(Modifier.width(2.dp).height(40.dp).background(BorderColor)) 
+                            Spacer(Modifier.width(8.dp))
+                            Text("Analyzing your request... (This is a simulated thinking process)", color = TextSecondary, fontSize = 13.sp)
                         }
                     }
+                }
+                
+                when (type) {
+                    "IMAGE" -> {
+                        val imageModel: Any = if (text.startsWith("http") || text.startsWith("data:image")) text else java.io.File(text)
+                        AsyncImage(
+                            model = imageModel,
+                            contentDescription = "Generated Image",
+                            modifier = Modifier.size(200.dp).clip(RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                    else -> Text(
+                        text = text.replace("**", "").replace("```", "").trim(),
+                        color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp,
+                        textAlign = TextAlign.Start,
+                        style = TextStyle(textDirection = TextDirection.Content)
+                    )
                 }
             }
         }
@@ -110,42 +126,52 @@ fun ChatInputBar(
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     isLoading: Boolean,
-    onStop: () -> Unit = {}
+    onStop: () -> Unit = {},
+    onAttachClick: () -> Unit
 ) {
     Box(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .imePadding()
-                .background(SecondarySurface, RoundedCornerShape(28.dp))
+                .background(SecondarySurface, RoundedCornerShape(24.dp))
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(onClick = onAttachClick, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Add, contentDescription = "Attach", tint = TextSecondary)
+            }
+            
             BasicTextField(
                 value = input,
                 onValueChange = onInputChange,
-                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 textStyle = TextStyle(color = TextPrimary, fontSize = 15.sp, textDirection = TextDirection.Content),
                 cursorBrush = SolidColor(AccentBlue),
                 maxLines = 4,
                 decorationBox = { innerTextField ->
                     Box {
-                        if (input.isEmpty()) Text("Message Nexus...", color = TextMuted, fontSize = 15.sp)
+                        if (input.isEmpty()) Text("Type a message...", color = TextMuted, fontSize = 15.sp)
                         innerTextField()
                     }
                 }
             )
             
+            Surface(shape = RoundedCornerShape(16.dp), color = ElevatedSurface) {
+                Text("Think", color = AccentBlue, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+            }
+            Spacer(Modifier.width(8.dp))
+            
             if (isLoading) {
                 FilledIconButton(
                     onClick = onStop,
-                    modifier = Modifier.size(42.dp),
+                    modifier = Modifier.size(36.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.Red)
                 ) {
-                    Icon(Icons.Default.Stop, contentDescription = "Stop", tint = Color.White, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Stop, contentDescription = "Stop", tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             } else {
                 FilledIconButton(
@@ -154,13 +180,13 @@ fun ChatInputBar(
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = if (input.isNotBlank()) AccentBlue else Color.Transparent
                     ),
-                    modifier = Modifier.size(42.dp)
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send",
                         tint = if (input.isNotBlank()) TextPrimary else TextMuted,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -168,45 +194,68 @@ fun ChatInputBar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EmptyStateGrid(onActionClick: (String) -> Unit) {
-    val actions = listOf(
-        Triple("Build App", Icons.Default.Build, AccentBlue),
-        Triple("Ghost Fix", Icons.Default.BugReport, Color.Red),
-        Triple("Image", Icons.Default.Image, AccentBlue),
-        Triple("Video", Icons.Default.VideoCall, AccentBlue),
-        Triple("Deep Research", Icons.Default.Search, Color(0xFF4CAF50)),
-        Triple("Writing", Icons.Default.Edit, Color(0xFFFF9800))
-    )
+fun AttachmentSheet(
+    onCameraClick: () -> Unit,
+    onPhotoClick: () -> Unit,
+    onDocumentClick: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var recentImages by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(actions.size) { index ->
-            val (title, icon, color) = actions[index]
-            Card(
-                modifier = Modifier.aspectRatio(1.2f).clickable { onActionClick(title) },
-                colors = CardDefaults.cardColors(containerColor = SecondarySurface),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Box(
-                        modifier = Modifier.size(56.dp).background(color.copy(alpha = 0.15f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(icon, null, tint = color, modifier = Modifier.size(32.dp))
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
+    LaunchedEffect(Unit) {
+        val images = mutableListOf<Uri>()
+        val projection = arrayOf(MediaStore.Images.Media._ID)
+        val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+        val cursor = context.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder)
+        cursor?.use {
+            val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            var count = 0
+            while (it.moveToNext() && count < 20) {
+                val id = it.getLong(idColumn)
+                val contentUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id.toString())
+                images.add(contentUri)
+                count++
             }
         }
+        recentImages = images
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardDark) {
+        Column(Modifier.padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                AttachmentButton(Icons.Default.CameraAlt, "Camera", onCameraClick)
+                AttachmentButton(Icons.Default.Image, "Photo", onPhotoClick)
+                AttachmentButton(Icons.Default.Description, "Document", onDocumentClick)
+            }
+            Spacer(Modifier.height(16.dp))
+            if (recentImages.isNotEmpty()) {
+                Text("Recent", color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(recentImages) { uri ->
+                        AsyncImage(
+                            model = uri,
+                            contentDescription = "Recent Image",
+                            modifier = Modifier.size(80.dp).clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+fun AttachmentButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onClick() }) {
+        Box(modifier = Modifier.size(60.dp).background(SecondarySurface, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = label, tint = TextPrimary, modifier = Modifier.size(24.dp))
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = label, fontSize = 12.sp, color = TextPrimary)
     }
 }

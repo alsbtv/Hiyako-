@@ -68,7 +68,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
     private var currentRequestId: Long = 0
 
     init {
-        // مراقبة قائمة المحادثات
         viewModelScope.launch {
             conversationDao.getAllConversations().collectLatest { convos ->
                 _conversations.value = convos
@@ -80,11 +79,12 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         
-        // مراقبة رسائل المحادثة النشطة
         viewModelScope.launch {
             _activeConversationId.collectLatest { id ->
                 if (id != null) {
-                    _chatTitle.value = conversationDao.getAllConversations().let { it } // Simplified for now
+                    conversationDao.getAllConversations().collectLatest { convos ->
+                        _chatTitle.value = convos.find { it.id == id }?.title ?: "New Chat"
+                    }
                     chatDao.getMessagesForChat(id).collectLatest { entities ->
                         _messages.value = entities.map { entity ->
                             val isThinking = entity.role == "ai" && entity.content == "Thinking..."
@@ -201,8 +201,8 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startMultiAgent(appIdea: String, customRoles: List<String>, webView: android.webkit.WebView?) { /*...*/ }
-    fun startGhostMode(errorLog: String, webView: android.webkit.WebView?) { /*...*/ }
+    fun startMultiAgent(appIdea: String, customRoles: List<String>, webView: android.webkit.WebView?) { /* Kept for future */ }
+    fun startGhostMode(errorLog: String, webView: android.webkit.WebView?) { /* Kept for future */ }
 
     fun onImageReceived(url: String) {
         val currentId = _activeConversationId.value ?: return
@@ -248,15 +248,23 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun applyChanges(token: String, aiResponse: String, context: Context) { /*...*/ }
+    fun onVideoReceived(url: String) {
+        val currentId = _activeConversationId.value ?: return
+        currentRequestId++
+        getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
+        viewModelScope.launch {
+            chatDao.deleteThinkingMessage(currentId)
+            chatDao.insertMessage(ChatEntity(conversationId = currentId, role = "ai", content = url, messageType = "VIDEO"))
+        }
+    }
 
-    private fun sendNotification(title: String, message: String) { /*...*/ }
+    fun applyChanges(token: String, aiResponse: String, context: Context) { /* Kept for future */ }
 }
 
 class AiBridge(private val vm: AiViewModel) {
     @JavascriptInterface fun onReady() { vm.setReady() }
     @JavascriptInterface fun onResponse(res: String) { vm.onResponse(res) }
     @JavascriptInterface fun onImageReceived(url: String) { vm.onImageReceived(url) }
-    @JavascriptInterface fun onVideoReceived(url: String) { /*...*/ }
+    @JavascriptInterface fun onVideoReceived(url: String) { vm.onVideoReceived(url) }
     @JavascriptInterface fun onModelsReceived(json: String) { vm.onModelsReceived(json) }
 }
