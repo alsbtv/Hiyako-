@@ -17,6 +17,8 @@ val BorderColor = Color(0xFF27272A)
 val TextPrimary = Color(0xFFFFFFFF)
 val TextSecondary = Color(0xFFA1A1AA)
 val AccentBlue = Color(0xFF3B82F6)
+val CardDark = Color(0xFF141414)
+val TextMuted = Color(0xFF71717A)
 
 private val DarkColorScheme = darkColorScheme(
     primary = AccentBlue,
