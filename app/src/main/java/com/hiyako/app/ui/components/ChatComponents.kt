@@ -1,7 +1,6 @@
 package com.hiyako.app.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -17,8 +16,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -27,20 +26,8 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.hiyako.app.ui.theme.*
 import kotlinx.coroutines.delay
-
-// ألوان Deep Core
-val DeepVoid = Color(0xFF05060F)
-val DeepSurface = Color(0xFF12141D)
-val AccentCyan = Color(0xFF00E5FF)
-val AccentPink = Color(0xFFFF3DCB)
-val TextWhite = Color(0xFFF0F0F5)
-val TextDim = Color(0xFF9E9EAF)
-val NexusVoid = DeepVoid
-val NexusCyan = AccentCyan
-val NexusMagenta = AccentPink
-val NexusGlass = Color(0x331A2147)
-val NexusText = TextWhite
 
 @Composable
 fun AnimatedLoadingText(type: String) {
@@ -56,7 +43,7 @@ fun AnimatedLoadingText(type: String) {
         "VIDEO" -> "Generating video"
         else -> "Thinking"
     }
-    Text(text = "$baseText${".".repeat(dotCount)}", color = NexusCyan, fontSize = 14.sp)
+    Text(text = "$baseText${".".repeat(dotCount)}", color = AccentBlue, fontSize = 14.sp)
 }
 
 @Composable
@@ -76,8 +63,8 @@ fun MessageBubble(
         verticalAlignment = Alignment.Top
     ) {
         if (!isUser) {
-            Box(Modifier.size(28.dp).background(NexusCyan, CircleShape).padding(top = 2.dp), contentAlignment = Alignment.Center) {
-                Text("N", color = NexusVoid, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Box(Modifier.size(28.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
+                Text("N", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(10.dp))
         }
@@ -86,10 +73,10 @@ fun MessageBubble(
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
             Surface(
-                color = if (isUser) NexusCyan.copy(alpha = 0.12f) else DeepSurface,
-                shape = RoundedCornerShape(24.dp)
+                color = if (isUser) UserBubble else Color.Transparent,
+                shape = RoundedCornerShape(20.dp)
             ) {
-                Box(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Box(Modifier.padding(horizontal = if (isUser) 16.dp else 0.dp, vertical = if (isUser) 10.dp else 0.dp)) {
                     if (isLoading) {
                         AnimatedLoadingText(type = type)
                     } else {
@@ -99,13 +86,13 @@ fun MessageBubble(
                                 AsyncImage(
                                     model = imageModel,
                                     contentDescription = "Generated Image",
-                                    modifier = Modifier.size(250.dp).clip(RoundedCornerShape(8.dp)).clickable { onImageClick(text) },
+                                    modifier = Modifier.size(250.dp).clip(RoundedCornerShape(12.dp)).clickable { onImageClick(text) },
                                     contentScale = ContentScale.Crop
                                 )
                             }
                             else -> Text(
                                 text = text.replace("**", "").replace("```", "").trim(),
-                                color = if (isUser) NexusCyan else TextWhite, fontSize = 15.sp, lineHeight = 22.sp,
+                                color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp,
                                 textAlign = if (isUser) TextAlign.End else TextAlign.Start,
                                 style = TextStyle(textDirection = TextDirection.Content)
                             )
@@ -133,7 +120,7 @@ fun ChatInputBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .imePadding()
-                .background(DeepSurface, RoundedCornerShape(32.dp))
+                .background(SecondarySurface, RoundedCornerShape(28.dp))
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -141,12 +128,12 @@ fun ChatInputBar(
                 value = input,
                 onValueChange = onInputChange,
                 modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
-                textStyle = TextStyle(color = NexusText, fontSize = 15.sp, textDirection = TextDirection.Content),
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(NexusCyan),
+                textStyle = TextStyle(color = TextPrimary, fontSize = 15.sp, textDirection = TextDirection.Content),
+                cursorBrush = SolidColor(AccentBlue),
                 maxLines = 4,
                 decorationBox = { innerTextField ->
                     Box {
-                        if (input.isEmpty()) Text("Message Nexus...", color = NexusText.copy(alpha = 0.5f), fontSize = 15.sp)
+                        if (input.isEmpty()) Text("Message Nexus...", color = TextMuted, fontSize = 15.sp)
                         innerTextField()
                     }
                 }
@@ -164,16 +151,15 @@ fun ChatInputBar(
                 FilledIconButton(
                     onClick = onSend,
                     enabled = input.isNotBlank(),
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.Transparent),
-                    modifier = Modifier.size(42.dp).background(
-                        if (input.isNotBlank()) Brush.linearGradient(listOf(NexusCyan, NexusMagenta)) else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)),
-                        CircleShape
-                    )
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = if (input.isNotBlank()) AccentBlue else Color.Transparent
+                    ),
+                    modifier = Modifier.size(42.dp)
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send",
-                        tint = if (input.isNotBlank()) NexusVoid else NexusText.copy(alpha = 0.5f),
+                        tint = if (input.isNotBlank()) TextPrimary else TextMuted,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -185,10 +171,10 @@ fun ChatInputBar(
 @Composable
 fun EmptyStateGrid(onActionClick: (String) -> Unit) {
     val actions = listOf(
-        Triple("Build App", Icons.Default.Build, NexusCyan),
+        Triple("Build App", Icons.Default.Build, AccentBlue),
         Triple("Ghost Fix", Icons.Default.BugReport, Color.Red),
-        Triple("Image", Icons.Default.Image, NexusMagenta),
-        Triple("Video", Icons.Default.VideoCall, Color(0xFF9C27B0)),
+        Triple("Image", Icons.Default.Image, AccentBlue),
+        Triple("Video", Icons.Default.VideoCall, AccentBlue),
         Triple("Deep Research", Icons.Default.Search, Color(0xFF4CAF50)),
         Triple("Writing", Icons.Default.Edit, Color(0xFFFF9800))
     )
@@ -203,7 +189,7 @@ fun EmptyStateGrid(onActionClick: (String) -> Unit) {
             val (title, icon, color) = actions[index]
             Card(
                 modifier = Modifier.aspectRatio(1.2f).clickable { onActionClick(title) },
-                colors = CardDefaults.cardColors(containerColor = DeepSurface),
+                colors = CardDefaults.cardColors(containerColor = SecondarySurface),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
@@ -218,7 +204,7 @@ fun EmptyStateGrid(onActionClick: (String) -> Unit) {
                         Icon(icon, null, tint = color, modifier = Modifier.size(32.dp))
                     }
                     Spacer(Modifier.height(12.dp))
-                    Text(title, color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

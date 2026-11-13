@@ -149,7 +149,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application) {
                         fullPrompt += "Here are the files:\n"
                         mentionedFiles.forEach { (path, content) -> fullPrompt += "--- $path ---\n$content\n" }
                     } else {
-                        fullPrompt += "Project files:\n" + WorkspaceManager.projectFiles.keys.joinToString("\n")
+                        fullPrompt += "Project files:\n" + WorkspaceManager.projectFiles.entries.joinToString("\n\n") { "--- FILE: ${it.key} ---\n${it.value}" }
                     }
                     fullPrompt += "\nUser Request: $text\nOutput FULL code with [FILE: path] format if needed."
                 } else {
