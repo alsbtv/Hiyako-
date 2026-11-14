@@ -1,33 +1,35 @@
 package com.hiyako.app.data.db
 
 import android.content.Context
-import androidx.room.Dao
-import androidx.room.Database
-import androidx.room.Entity
-import androidx.room.Insert
-import androidx.room.PrimaryKey
-import androidx.room.Query
-import androidx.room.Room
-import androidx.room.RoomDatabase
+import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
-// جدول المحادثات الجديد
 @Entity(tableName = "conversations")
 data class ConversationEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val title: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val isPinned: Boolean = false
+    val isPinned: Boolean = false,
+    val isGroup: Boolean = false,
+    val groupModelsJson: String = "[]" // تخزين النماذج المشاركة في القروب
 )
 
-// جدول الرسائل (تمت إضافة conversationId لربطه بالمحادثة)
 @Entity(tableName = "chat_messages")
 data class ChatEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val conversationId: Int, // الربط بالمحادثة
-    val role: String, // "user" or "ai"
+    val conversationId: Int,
+    val role: String, // "user", "ai", "system"
     val content: String,
-    val messageType: String = "TEXT", // "TEXT", "IMAGE", "VIDEO"
+    val messageType: String = "TEXT", // "TEXT", "IMAGE", "FILE", "AUDIO", "VIDEO"
+    val attachmentUri: String? = null,
+    val senderName: String? = null, // اسم النموذج في القروب
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "memories")
+data class MemoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val content: String,
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -46,7 +48,7 @@ interface ChatDao {
     suspend fun clearChat(conversationId: Int)
     
     @Query("DELETE FROM chat_messages")
-    suspend fun clearAllChats()
+    suspend fun clearAllMessages()
 }
 
 @Dao
@@ -70,10 +72,21 @@ interface ConversationDao {
     suspend fun deleteAllConversations()
 }
 
-@Database(entities = [ChatEntity::class, ConversationEntity::class], version = 3, exportSchema = false)
+@Dao
+interface MemoryDao {
+    @Query("SELECT * FROM memories ORDER BY timestamp DESC")
+    fun getAllMemories(): Flow<List<MemoryEntity>>
+    @Insert
+    suspend fun insertMemory(memory: MemoryEntity)
+    @Query("DELETE FROM memories")
+    suspend fun clearMemories()
+}
+
+@Database(entities = [ChatEntity::class, ConversationEntity::class, MemoryEntity::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
     abstract fun conversationDao(): ConversationDao
+    abstract fun memoryDao(): MemoryDao
 
     companion object {
         @Volatile

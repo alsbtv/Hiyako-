@@ -2,11 +2,14 @@ package com.hiyako.app.ui.screens
 
 import android.annotation.SuppressLint
 import android.app.Dialog
+import android.net.Uri
 import android.os.Message
 import android.view.WindowManager
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -33,7 +36,6 @@ import com.hiyako.app.ui.components.ChatInputBar
 import com.hiyako.app.ui.components.MessageBubble
 import com.hiyako.app.ui.theme.*
 import kotlinx.coroutines.launch
-import java.util.*
 
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,20 +44,27 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
+    var selectedAttachmentUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedAttachmentType by remember { mutableStateOf<String?>(null) }
+    
     val messages by vm.messages.collectAsState()
     val conversations by vm.conversations.collectAsState()
     val chatTitle by vm.chatTitle.collectAsState()
-    val selectedModel by vm.selectedModel.collectAsState()
-    val filteredModels by vm.filteredModels.collectAsState()
-    val isThinking by vm.isThinking.collectAsState()
-    val isAnyLoading = messages.any { it.isLoading }
     val activeConversationId by vm.activeConversationId.collectAsState()
+    val isAnyLoading = messages.any { it.isLoading }
     
     var webView by remember { mutableStateOf<WebView?>(null) }
     var showLoginView by remember { mutableStateOf(false) }
-    var showModelSheet by remember { mutableStateOf(false) }
-    var searchModelQuery by remember { mutableStateOf("") }
+    var showAttachmentSheet by remember { mutableStateOf(false) }
     var expandedMenuId by remember { mutableStateOf<Int?>(null) }
+
+    // File Picker
+    val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) { selectedAttachmentUri = uri; selectedAttachmentType = "file" }
+    }
+    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) { selectedAttachmentUri = uri; selectedAttachmentType = "image" }
+    }
 
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) { if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1) }
@@ -72,35 +81,55 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                         leadingIcon = { Icon(Icons.Default.Search, null, tint = TextSecondary, modifier = Modifier.size(20.dp)) }
                     )
                     Spacer(Modifier.height(16.dp))
+                    
                     Row(Modifier.fillMaxWidth().clickable { vm.createNewConversation(); scope.launch { drawerState.close() } }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Add, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(12.dp))
                         Text("New Chat", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
+                    Row(Modifier.fillMaxWidth().clickable { vm.createNewConversation(isGroup = true); scope.launch { drawerState.close() } }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Group, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("New Group Chat", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    }
                     Divider(color = BorderColor)
 
                     LazyColumn(Modifier.weight(1f)) {
-                        conversations.groupBy { getGroupName(it.timestamp) }.forEach { (groupName, chats) ->
-                            item { Text(groupName, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp)) }
-                            items(chats) { chat ->
-                                Box {
-                                    Row(Modifier.fillMaxWidth().clickable { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }.padding(vertical = 8.dp, horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        items(conversations) { chat ->
+                            Box {
+                                Row(
+                                    Modifier.fillMaxWidth().background(if (vm.selectedChatIds.contains(chat.id)) SecondarySurface else Color.Transparent, RoundedCornerShape(8.dp))
+                                        .clickable { 
+                                            if (vm.isMultiSelectMode) {
+                                                if (vm.selectedChatIds.contains(chat.id)) vm.selectedChatIds.remove(chat.id) else vm.selectedChatIds.add(chat.id)
+                                            } else {
+                                                vm.selectConversation(chat.id); scope.launch { drawerState.close() }
+                                            }
+                                        }.padding(vertical = 10.dp, horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (vm.isMultiSelectMode) {
+                                        Checkbox(checked = vm.selectedChatIds.contains(chat.id), onCheckedChange = { 
+                                            if (it) vm.selectedChatIds.add(chat.id) else vm.selectedChatIds.remove(chat.id)
+                                        }, colors = CheckboxDefaults.colors(checkedColor = AccentBlue))
+                                    } else {
+                                        if (chat.isPinned) { Icon(Icons.Default.PushPin, null, tint = TextSecondary, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
                                         Text(chat.title, color = TextPrimary, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
-                                        if (activeConversationId == chat.id) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
-                                        IconButton(onClick = { expandedMenuId = chat.id }, modifier = Modifier.size(24.dp)) {
-                                            Icon(Icons.Default.MoreVert, null, tint = TextSecondary, modifier = Modifier.size(18.dp))
-                                        }
-                                    }
-                                    DropdownMenu(
-                                        expanded = expandedMenuId == chat.id,
-                                        onDismissRequest = { expandedMenuId = null },
-                                        properties = PopupProperties(focusable = true)
-                                    ) {
-                                        DropdownMenuItem(text = { Text("Rename") }, onClick = { vm.renameChat(chat.id, "Renamed Chat"); expandedMenuId = null })
-                                        DropdownMenuItem(text = { Text("Delete", color = Color.Red) }, onClick = { vm.deleteChat(chat.id); expandedMenuId = null })
+                                        IconButton(onClick = { expandedMenuId = chat.id }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.MoreVert, null, tint = TextSecondary, modifier = Modifier.size(18.dp)) }
                                     }
                                 }
+                                DropdownMenu(expanded = expandedMenuId == chat.id, onDismissRequest = { expandedMenuId = null }, properties = PopupProperties(focusable = true)) {
+                                    DropdownMenuItem(text = { Text("Rename") }, onClick = { vm.renameChat(chat.id, "Renamed Chat"); expandedMenuId = null })
+                                    DropdownMenuItem(text = { Text(if (chat.isPinned) "Unpin" else "Pin") }, onClick = { vm.togglePin(chat.id, !chat.isPinned); expandedMenuId = null })
+                                    DropdownMenuItem(text = { Text("Delete", color = Color.Red) }, onClick = { vm.deleteChat(chat.id); expandedMenuId = null })
+                                }
                             }
+                        }
+                    }
+
+                    if (vm.isMultiSelectMode) {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(onClick = { vm.selectedChatIds.forEach { vm.togglePin(it, true) }; vm.isMultiSelectMode = false; vm.selectedChatIds.clear() }) { Text("Pin", color = TextSecondary) }
+                            TextButton(onClick = { vm.selectedChatIds.forEach { vm.deleteChat(it) }; vm.isMultiSelectMode = false; vm.selectedChatIds.clear() }) { Text("Delete", color = Color.Red) }
                         }
                     }
 
@@ -120,31 +149,33 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
             topBar = {
                 if (!showLoginView) {
                     Row(Modifier.fillMaxWidth().padding(top = 16.dp, start = 12.dp, end = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { 
-                            Icon(Icons.Default.Menu, null, tint = Color.White, modifier = Modifier.size(24.dp)) 
-                        }
-                        Row(Modifier.clickable { showModelSheet = true }, verticalAlignment = Alignment.CenterVertically) {
-                            Text(chatTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                            Icon(Icons.Default.ArrowDropDown, null, tint = TextSecondary)
-                        }
-                        IconButton(onClick = { showLoginView = true }, modifier = Modifier.size(36.dp)) { 
-                            Icon(Icons.Default.AccountCircle, null, tint = Color.White, modifier = Modifier.size(24.dp)) 
-                        }
+                        IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Menu, null, tint = Color.White, modifier = Modifier.size(24.dp)) }
+                        Text(chatTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        IconButton(onClick = { showLoginView = true }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.AccountCircle, null, tint = Color.White, modifier = Modifier.size(24.dp)) }
                     }
                 }
             },
             bottomBar = {
                 if (!showLoginView) {
-                    ChatInputBar(
-                        input = input, 
-                        onInputChange = { input = it }, 
-                        onSend = { vm.sendMessage(input, webView); input = "" }, 
-                        onStop = { }, 
-                        isLoading = isAnyLoading,
-                        onAttachClick = { },
-                        isThinking = isThinking,
-                        onThinkClick = { vm.toggleThink() }
-                    )
+                    Column {
+                        if (selectedAttachmentUri != null) {
+                            Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("📎 Attachment ready: ${selectedAttachmentUri!!.lastPathSegment}", color = AccentBlue, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                IconButton(onClick = { selectedAttachmentUri = null; selectedAttachmentType = null }) { Icon(Icons.Default.Close, null, tint = Color.Red, modifier = Modifier.size(16.dp)) }
+                            }
+                        }
+                        ChatInputBar(
+                            input = input, 
+                            onInputChange = { input = it }, 
+                            onSend = { vm.sendMessage(input, selectedAttachmentUri, selectedAttachmentType, webView); input = ""; selectedAttachmentUri = null }, 
+                            isLoading = isAnyLoading,
+                            onAttachClick = { showAttachmentSheet = true },
+                            isThinking = vm.isThinkingMode,
+                            onThinkClick = { vm.toggleThink() },
+                            isSearch = vm.isSearchMode,
+                            onSearchClick = { vm.toggleSearch() }
+                        )
+                    }
                 }
             }
         ) { padding ->
@@ -156,21 +187,24 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                         }
                     } else {
                         LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 4.dp)) {
-                            items(messages) { msg -> MessageBubble(text = msg.content, isUser = msg.isUser, isLoading = msg.isLoading, type = msg.type) }
+                            items(messages) { msg -> 
+                                MessageBubble(text = msg.content, isUser = msg.isUser, isLoading = msg.isLoading, type = msg.type, attachmentUri = msg.attachmentUri, senderName = msg.senderName, onRegenerate = { vm.regenerateResponse(webView) }) 
+                            }
                         }
                     }
                 }
                 
-                if (showModelSheet) {
-                    ModalBottomSheet(onDismissRequest = { showModelSheet = false }, containerColor = CardDark) {
-                        Column(Modifier.padding(16.dp).fillMaxHeight(0.8f)) {
-                            Text("Select Model", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                            OutlinedTextField(value = searchModelQuery, onValueChange = { searchModelQuery = it; vm.filterModels(it) }, placeholder = { Text("Search models...") }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-                            LazyColumn {
-                                items(filteredModels) { model ->
-                                    Row(Modifier.fillMaxWidth().clickable { vm.selectModel(model); showModelSheet = false }.padding(vertical = 12.dp)) { 
-                                        Text(model.name, color = TextPrimary, fontSize = 15.sp) 
-                                    }
+                if (showAttachmentSheet) {
+                    ModalBottomSheet(onDismissRequest = { showAttachmentSheet = false }, containerColor = CardDark) {
+                        Column(Modifier.padding(16.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { showAttachmentSheet = false; imagePickerLauncher.launch("image/*") }) {
+                                    Icon(Icons.Default.Image, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
+                                    Text("Image", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { showAttachmentSheet = false; filePickerLauncher.launch("*/*") }) {
+                                    Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
+                                    Text("File", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                                 }
                             }
                         }
@@ -229,12 +263,4 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
             }
         }
     }
-}
-
-fun getGroupName(timestamp: Long): String {
-    val now = Calendar.getInstance(); val msgDate = Calendar.getInstance().apply { timeInMillis = timestamp }
-    if (now.get(Calendar.YEAR) == msgDate.get(Calendar.YEAR) && now.get(Calendar.DAY_OF_YEAR) == msgDate.get(Calendar.DAY_OF_YEAR)) return "Today"
-    now.add(Calendar.DAY_OF_YEAR, -1)
-    if (now.get(Calendar.YEAR) == msgDate.get(Calendar.YEAR) && now.get(Calendar.DAY_OF_YEAR) == msgDate.get(Calendar.DAY_OF_YEAR)) return "Yesterday"
-    return "Older"
 }
