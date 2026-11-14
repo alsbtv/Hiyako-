@@ -173,6 +173,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                             isThinking = vm.isThinkingMode,
                             onThinkClick = { vm.toggleThink() },
                             isSearch = vm.isSearchMode,
+                            onVoiceClick = { },
                             onSearchClick = { vm.toggleSearch() }
                         )
                     }

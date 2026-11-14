@@ -78,9 +78,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
                         val currentConvo = convos.find { it.id == id }
                         _chatTitle.value = currentConvo?.title ?: "New Chat"
                         isGroupChatMode = currentConvo?.isGroup ?: false
-                        if (currentConvo?.isGroup == true && selectedGroupModels.isEmpty()) {
-                            // استرجاع نماذج القروب إذا وجدت
-                        }
                     }
                     chatDao.getMessagesForChat(id).collectLatest { entities ->
                         _messages.value = entities.map { entity -> Message(entity.content, entity.role == "user", isLoading = entity.content == "Thinking...", type = entity.messageType, attachmentUri = entity.attachmentUri, senderName = entity.senderName) }
@@ -158,7 +155,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
             if (isSearchMode) finalPrompt = "Use web search if needed.\n$finalPrompt"
             
             if (isGroupChatMode && selectedGroupModels.isNotEmpty()) {
-                // إرسال النموذج الأول (لتبسيط الأمر، التفاعل الجماعي الكامل يحتاج منطقاً أعمق)
                 val firstModel = selectedGroupModels.first().id
                 val js = "window.askPuter(\"${finalPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"$firstModel\");"
                 webView?.evaluateJavascript(js, null)
@@ -167,6 +163,19 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
                 webView?.evaluateJavascript(js, null)
             }
         }
+    }
+
+    fun regenerateResponse(webView: android.webkit.WebView?) {
+        val currentId = _activeConversationId.value ?: return
+        val lastUserMsg = _messages.value.lastOrNull { it.isUser }?.content ?: return
+        viewModelScope.launch {
+            chatDao.deleteThinkingMessage(currentId)
+            chatDao.insertMessage(ChatEntity(conversationId = currentId, role = "ai", content = "Thinking...", messageType = "TEXT"))
+        }
+        var finalPrompt = lastUserMsg
+        if (isThinkingMode) finalPrompt = "Think step by step before answering.\n$lastUserMsg"
+        val js = "window.askPuter(\"${finalPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
+        webView?.evaluateJavascript(js, null)
     }
 
     fun onTitleGenerated(title: String) {
@@ -179,7 +188,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
         getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
         viewModelScope.launch {
             chatDao.deleteThinkingMessage(currentId)
-            // التحقق مما إذا كان الرد يحتوي على طلب إنشاء ملف
             if (res.contains("[GENERATE_FILE:")) {
                 val fileName = res.substringAfter("[GENERATE_FILE:").substringBefore("]")
                 val content = res.substringAfter("]").trim()
