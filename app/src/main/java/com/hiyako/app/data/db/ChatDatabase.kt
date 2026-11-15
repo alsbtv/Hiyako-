@@ -22,7 +22,7 @@ data class ChatEntity(
     val content: String,
     val messageType: String = "TEXT", // "TEXT", "IMAGE", "FILE", "AUDIO", "VIDEO"
     val attachmentUri: String? = null,
-    val senderName: String? = null, // اسم النموذج في القروب
+    val senderName: String? = null, // اسم النموذج في القروب / اسم الملف المرفق
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -35,18 +35,24 @@ data class MemoryEntity(
 
 @Dao
 interface ChatDao {
-    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId ORDER BY timestamp ASC")
+    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC")
     fun getMessagesForChat(conversationId: Int): Flow<List<ChatEntity>>
+
+    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC")
+    suspend fun getMessagesOnce(conversationId: Int): List<ChatEntity>
 
     @Insert
     suspend fun insertMessage(message: ChatEntity)
+
+    @Query("DELETE FROM chat_messages WHERE id = :messageId")
+    suspend fun deleteMessage(messageId: Int)
 
     @Query("DELETE FROM chat_messages WHERE role = 'ai' AND content = 'Thinking...' AND conversationId = :conversationId")
     suspend fun deleteThinkingMessage(conversationId: Int)
 
     @Query("DELETE FROM chat_messages WHERE conversationId = :conversationId")
     suspend fun clearChat(conversationId: Int)
-    
+
     @Query("DELETE FROM chat_messages")
     suspend fun clearAllMessages()
 }
@@ -61,13 +67,16 @@ interface ConversationDao {
 
     @Query("UPDATE conversations SET title = :newTitle WHERE id = :conversationId")
     suspend fun updateTitle(conversationId: Int, newTitle: String)
-    
+
     @Query("UPDATE conversations SET isPinned = :isPinned WHERE id = :conversationId")
     suspend fun updatePin(conversationId: Int, isPinned: Boolean)
 
+    @Query("UPDATE conversations SET timestamp = :timestamp WHERE id = :conversationId")
+    suspend fun touch(conversationId: Int, timestamp: Long)
+
     @Query("DELETE FROM conversations WHERE id = :conversationId")
     suspend fun deleteConversation(conversationId: Int)
-    
+
     @Query("DELETE FROM conversations")
     suspend fun deleteAllConversations()
 }
@@ -76,8 +85,10 @@ interface ConversationDao {
 interface MemoryDao {
     @Query("SELECT * FROM memories ORDER BY timestamp DESC")
     fun getAllMemories(): Flow<List<MemoryEntity>>
+
     @Insert
     suspend fun insertMemory(memory: MemoryEntity)
+
     @Query("DELETE FROM memories")
     suspend fun clearMemories()
 }
