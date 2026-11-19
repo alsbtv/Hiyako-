@@ -12,6 +12,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.runtime.CompositionLocalProvider
+import com.hiyako.app.ui.i18n.Lang
 
 /** One complete visual theme. Every screen reads its colors from the active palette. */
 data class AppPalette(
@@ -134,7 +138,10 @@ val LightTextSecondary = Color(0xFF52525B)
 @Composable
 fun AppTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
     val context = LocalContext.current
-    remember { ThemeState.loadSaved(context, darkTheme) }
+    remember {
+        ThemeState.loadSaved(context, darkTheme)
+        Lang.load(context)
+    }
     val p = ThemeState.palette
     val scheme = if (p.dark) {
         darkColorScheme(
@@ -161,5 +168,9 @@ fun AppTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable ()
             outline = p.border
         )
     }
-    MaterialTheme(colorScheme = scheme, content = content)
+    CompositionLocalProvider(
+        LocalLayoutDirection provides if (Lang.arabic) LayoutDirection.Rtl else LayoutDirection.Ltr
+    ) {
+        MaterialTheme(colorScheme = scheme, content = content)
+    }
 }

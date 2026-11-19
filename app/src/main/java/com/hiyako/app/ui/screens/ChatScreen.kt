@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,7 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -42,7 +41,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -53,6 +51,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -64,13 +63,13 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,17 +79,21 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.hiyako.app.data.db.ConversationEntity
-import com.hiyako.app.ui.components.AnimatedLoadingText
-import com.hiyako.app.ui.components.ChatInputBar
-import com.hiyako.app.ui.components.ErrorBubble
-import com.hiyako.app.ui.components.MessageBubble
+import com.hiyako.app.ui.components.AssistantMessage
+import com.hiyako.app.ui.components.ComposerBar
+import com.hiyako.app.ui.components.ErrorCard
+import com.hiyako.app.ui.components.SuggestionCard
+import com.hiyako.app.ui.components.TypingDots
+import com.hiyako.app.ui.components.UserMessage
+import com.hiyako.app.ui.components.chatShareText
+import com.hiyako.app.ui.i18n.tr
 import com.hiyako.app.ui.theme.AccentBlue
 import com.hiyako.app.ui.theme.BorderColor
 import com.hiyako.app.ui.theme.CardDark
@@ -125,7 +128,7 @@ private fun SearchField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp, textDirection = TextDirection.Content),
+            textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp),
             cursorBrush = SolidColor(AccentBlue),
             modifier = Modifier.weight(1f),
             decorationBox = { inner ->
@@ -153,21 +156,24 @@ private fun ModelPickerSheet(
         if (q.isBlank()) models else models.filter { it.name.contains(q, true) || it.id.contains(q, true) }
     }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = CardDark) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(0.8f).padding(horizontal = 16.dp)) {
-            Text("Choose a model", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Column(Modifier.fillMaxWidth().fillMaxSize(0.8f).padding(horizontal = 16.dp)) {
+            Text(tr("Choose a model", "اختر نموذجاً"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
             if (models.isEmpty()) {
                 Text(
-                    "No models loaded yet. Check your internet connection and Puter sign-in, then refresh.",
+                    tr(
+                        "No models yet. Add an account in Settings and load its models, or sign in to Puter.",
+                        "لا توجد نماذج بعد. أضف حساباً من الإعدادات وحمّل نماذجه، أو سجّل الدخول إلى Puter."
+                    ),
                     color = TextSecondary,
                     fontSize = 14.sp
                 )
-                TextButton(onClick = onRefresh) { Text("Refresh", color = AccentBlue) }
+                TextButton(onClick = onRefresh) { Text(tr("Refresh", "تحديث"), color = AccentBlue) }
             } else {
-                SearchField(q, { q = it }, "Search models...")
+                SearchField(q, { q = it }, tr("Search models", "ابحث عن نموذج"))
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(Modifier.weight(1f)) {
-                    items(filtered, key = { it.id }) { m ->
+                    items(filtered, key = { "${it.accountId}|${it.id}|${it.name}" }) { m ->
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -192,6 +198,82 @@ private fun ModelPickerSheet(
     }
 }
 
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        color = TextMuted,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp)
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ConversationRow(
+    chat: ConversationEntity,
+    active: Boolean,
+    multiSelect: Boolean,
+    selected: Boolean,
+    menuOpen: Boolean,
+    onOpen: () -> Unit,
+    onLongPress: () -> Unit,
+    onToggleSelect: (Boolean) -> Unit,
+    onMenu: () -> Unit,
+    onDismissMenu: () -> Unit,
+    onRename: () -> Unit,
+    onPin: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected || active) SecondarySurface else Color.Transparent)
+            .combinedClickable(onClick = onOpen, onLongClick = onLongPress)
+            .padding(vertical = 8.dp, horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (multiSelect) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = onToggleSelect,
+                colors = CheckboxDefaults.colors(checkedColor = AccentBlue)
+            )
+        } else if (chat.isPinned) {
+            Icon(Icons.Default.PushPin, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            chat.title,
+            color = TextPrimary,
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        if (!multiSelect) {
+            Box {
+                IconButton(onClick = onMenu, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.MoreVert, tr("More", "المزيد"), tint = TextSecondary, modifier = Modifier.size(18.dp))
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = onDismissMenu) {
+                    DropdownMenuItem(text = { Text(tr("Rename", "إعادة التسمية")) }, onClick = onRename)
+                    DropdownMenuItem(
+                        text = { Text(if (chat.isPinned) tr("Unpin", "إلغاء التثبيت") else tr("Pin", "تثبيت")) },
+                        onClick = onPin
+                    )
+                    DropdownMenuItem(
+                        text = { Text(tr("Delete", "حذف"), color = Color.Red) },
+                        onClick = onDelete
+                    )
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewModel()) {
@@ -203,6 +285,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     var attachmentUri by remember { mutableStateOf<Uri?>(null) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var showModelSheet by remember { mutableStateOf(false) }
+    var showTopMenu by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<ConversationEntity?>(null) }
     var deleteTargets by remember { mutableStateOf<List<Int>?>(null) }
     var query by remember { mutableStateOf("") }
@@ -258,7 +341,14 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
 
     val send: () -> Unit = {
         if (!vm.canSend()) {
-            Toast.makeText(context, "Connecting to the AI engine... check your internet and try again", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                tr(
+                    "Connecting to the AI engine. Check your internet and try again.",
+                    "جارٍ الاتصال بمحرك الذكاء الاصطناعي. تحقق من الإنترنت وحاول مرة أخرى."
+                ),
+                Toast.LENGTH_SHORT
+            ).show()
         } else {
             vm.sendMessage(input, attachmentUri)
             input = ""
@@ -270,114 +360,178 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     val filteredConversations = remember(conversations, query) {
         if (query.isBlank()) conversations else conversations.filter { it.title.contains(query, ignoreCase = true) }
     }
+    val pinned = remember(filteredConversations) { filteredConversations.filter { it.isPinned } }
+    val recent = remember(filteredConversations) { filteredConversations.filter { !it.isPinned } }
+
+    val suggestions = listOf(
+        tr("Explain a complex idea simply", "اشرح لي فكرة معقدة ببساطة"),
+        tr("Help me write a message", "ساعدني في كتابة رسالة"),
+        tr("Plan my day step by step", "رتّب لي يومي خطوة بخطوة"),
+        tr("Write code for an idea", "اكتب كوداً لفكرة لدي")
+    )
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = DeepSurface, modifier = Modifier.width(300.dp)) {
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
-                    SearchField(query, { query = it }, "Search chats...")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(34.dp).background(AccentBlue, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("✦", color = Color.White, fontSize = 15.sp)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(tr("Hiyako", "هياكو"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    SearchField(query, { query = it }, tr("Search chats", "ابحث في المحادثات"))
                     Spacer(Modifier.height(12.dp))
-
                     Row(
                         Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AccentBlue.copy(alpha = 0.15f))
                             .clickable {
                                 vm.createNewConversation()
                                 scope.launch { drawerState.close() }
                             }
-                            .padding(vertical = 12.dp),
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Add, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text("New Chat", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Icon(Icons.Default.Add, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            tr("New chat", "محادثة جديدة"),
+                            color = AccentBlue,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
-                    HorizontalDivider(color = BorderColor)
+                    Spacer(Modifier.height(8.dp))
 
                     LazyColumn(Modifier.weight(1f)) {
-                        items(filteredConversations, key = { it.id }) { chat ->
-                            val selected = vm.selectedChatIds.contains(chat.id)
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        if (selected || chat.id == activeId) SecondarySurface else Color.Transparent
-                                    )
-                                    .combinedClickable(
-                                        onClick = {
-                                            if (vm.isMultiSelectMode) {
-                                                if (selected) vm.selectedChatIds.remove(chat.id) else vm.selectedChatIds.add(chat.id)
+                        if (pinned.isNotEmpty()) {
+                            item(key = "header-pinned") { SectionLabel(tr("Pinned", "المثبتة")) }
+                            items(pinned, key = { "p${it.id}" }) { chat ->
+                                ConversationRow(
+                                    chat = chat,
+                                    active = chat.id == activeId,
+                                    multiSelect = vm.isMultiSelectMode,
+                                    selected = vm.selectedChatIds.contains(chat.id),
+                                    menuOpen = expandedMenuId == chat.id,
+                                    onOpen = {
+                                        if (vm.isMultiSelectMode) {
+                                            if (vm.selectedChatIds.contains(chat.id)) {
+                                                vm.selectedChatIds.remove(chat.id)
                                             } else {
-                                                vm.selectConversation(chat.id)
-                                                scope.launch { drawerState.close() }
-                                            }
-                                        },
-                                        onLongClick = {
-                                            if (!vm.isMultiSelectMode) {
-                                                vm.isMultiSelectMode = true
-                                                vm.selectedChatIds.clear()
                                                 vm.selectedChatIds.add(chat.id)
                                             }
+                                        } else {
+                                            vm.selectConversation(chat.id)
+                                            scope.launch { drawerState.close() }
                                         }
-                                    )
-                                    .padding(vertical = 6.dp, horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (vm.isMultiSelectMode) {
-                                    Checkbox(
-                                        checked = selected,
-                                        onCheckedChange = {
-                                            if (it) vm.selectedChatIds.add(chat.id) else vm.selectedChatIds.remove(chat.id)
-                                        },
-                                        colors = CheckboxDefaults.colors(checkedColor = AccentBlue)
-                                    )
-                                    Text(chat.title, color = TextPrimary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                } else {
-                                    if (chat.isPinned) {
-                                        Icon(Icons.Default.PushPin, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
-                                        Spacer(Modifier.width(4.dp))
+                                    },
+                                    onLongPress = {
+                                        if (!vm.isMultiSelectMode) {
+                                            vm.isMultiSelectMode = true
+                                            vm.selectedChatIds.clear()
+                                            vm.selectedChatIds.add(chat.id)
+                                        }
+                                    },
+                                    onToggleSelect = { checked ->
+                                        if (checked) vm.selectedChatIds.add(chat.id) else vm.selectedChatIds.remove(chat.id)
+                                    },
+                                    onMenu = { expandedMenuId = chat.id },
+                                    onDismissMenu = { expandedMenuId = null },
+                                    onRename = {
+                                        renameTarget = chat
+                                        expandedMenuId = null
+                                    },
+                                    onPin = {
+                                        vm.togglePin(chat.id, !chat.isPinned)
+                                        expandedMenuId = null
+                                    },
+                                    onDelete = {
+                                        deleteTargets = listOf(chat.id)
+                                        expandedMenuId = null
                                     }
-                                    Text(chat.title, color = TextPrimary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                    Box {
-                                        IconButton(onClick = { expandedMenuId = chat.id }, modifier = Modifier.size(32.dp)) {
-                                            Icon(Icons.Default.MoreVert, "Menu", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                )
+                            }
+                        }
+                        if (recent.isNotEmpty()) {
+                            item(key = "header-recent") { SectionLabel(tr("Recent", "الأخيرة")) }
+                            items(recent, key = { "r${it.id}" }) { chat ->
+                                ConversationRow(
+                                    chat = chat,
+                                    active = chat.id == activeId,
+                                    multiSelect = vm.isMultiSelectMode,
+                                    selected = vm.selectedChatIds.contains(chat.id),
+                                    menuOpen = expandedMenuId == chat.id,
+                                    onOpen = {
+                                        if (vm.isMultiSelectMode) {
+                                            if (vm.selectedChatIds.contains(chat.id)) {
+                                                vm.selectedChatIds.remove(chat.id)
+                                            } else {
+                                                vm.selectedChatIds.add(chat.id)
+                                            }
+                                        } else {
+                                            vm.selectConversation(chat.id)
+                                            scope.launch { drawerState.close() }
                                         }
-                                        DropdownMenu(expanded = expandedMenuId == chat.id, onDismissRequest = { expandedMenuId = null }) {
-                                            DropdownMenuItem(text = { Text("Rename") }, onClick = {
-                                                renameTarget = chat
-                                                expandedMenuId = null
-                                            })
-                                            DropdownMenuItem(text = { Text(if (chat.isPinned) "Unpin" else "Pin") }, onClick = {
-                                                vm.togglePin(chat.id, !chat.isPinned)
-                                                expandedMenuId = null
-                                            })
-                                            DropdownMenuItem(text = { Text("Delete", color = Color.Red) }, onClick = {
-                                                deleteTargets = listOf(chat.id)
-                                                expandedMenuId = null
-                                            })
+                                    },
+                                    onLongPress = {
+                                        if (!vm.isMultiSelectMode) {
+                                            vm.isMultiSelectMode = true
+                                            vm.selectedChatIds.clear()
+                                            vm.selectedChatIds.add(chat.id)
                                         }
+                                    },
+                                    onToggleSelect = { checked ->
+                                        if (checked) vm.selectedChatIds.add(chat.id) else vm.selectedChatIds.remove(chat.id)
+                                    },
+                                    onMenu = { expandedMenuId = chat.id },
+                                    onDismissMenu = { expandedMenuId = null },
+                                    onRename = {
+                                        renameTarget = chat
+                                        expandedMenuId = null
+                                    },
+                                    onPin = {
+                                        vm.togglePin(chat.id, !chat.isPinned)
+                                        expandedMenuId = null
+                                    },
+                                    onDelete = {
+                                        deleteTargets = listOf(chat.id)
+                                        expandedMenuId = null
                                     }
-                                }
+                                )
                             }
                         }
                     }
 
                     if (vm.isMultiSelectMode) {
-                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
                             TextButton(onClick = {
                                 vm.isMultiSelectMode = false
                                 vm.selectedChatIds.clear()
-                            }) { Text("Cancel", color = TextSecondary) }
+                            }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) }
                             TextButton(onClick = {
                                 vm.selectedChatIds.toList().forEach { vm.togglePin(it, true) }
                                 vm.isMultiSelectMode = false
                                 vm.selectedChatIds.clear()
-                            }) { Text("Pin", color = TextSecondary) }
-                            TextButton(
-                                onClick = { if (vm.selectedChatIds.isNotEmpty()) deleteTargets = vm.selectedChatIds.toList() }
-                            ) { Text("Delete (" + vm.selectedChatIds.size + ")", color = Color.Red) }
+                            }) { Text(tr("Pin", "تثبيت"), color = TextSecondary) }
+                            TextButton(onClick = {
+                                if (vm.selectedChatIds.isNotEmpty()) deleteTargets = vm.selectedChatIds.toList()
+                            }) {
+                                Text(
+                                    tr("Delete", "حذف") + " (" + vm.selectedChatIds.size + ")",
+                                    color = Color.Red
+                                )
+                            }
                         }
                     }
 
@@ -385,14 +539,18 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                     Row(
                         Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
                             .clickable {
                                 scope.launch { drawerState.close() }
                                 onNavigateToSettings()
                             }
-                            .padding(vertical = 14.dp),
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(Modifier.size(32.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier.size(36.dp).background(AccentBlue, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(
                                 auth.username.firstOrNull()?.uppercase() ?: "?",
                                 color = Color.White,
@@ -402,9 +560,13 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Settings", color = TextPrimary, fontSize = 15.sp)
+                            Text(tr("Settings", "الإعدادات"), color = TextPrimary, fontSize = 15.sp)
                             Text(
-                                if (auth.signedIn) (if (auth.username.isNotEmpty()) auth.username else "Signed in") else "Not signed in",
+                                if (auth.signedIn) {
+                                    if (auth.username.isNotEmpty()) auth.username else tr("Signed in", "مسجّل الدخول")
+                                } else {
+                                    tr("Not signed in", "غير مسجّل الدخول")
+                                },
                                 color = TextMuted,
                                 fontSize = 11.sp
                             )
@@ -420,11 +582,11 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
             modifier = Modifier.imePadding().fillMaxSize(),
             topBar = {
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 10.dp, start = 8.dp, end = 8.dp, bottom = 4.dp),
+                    Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                        Icon(Icons.Default.Menu, "Menu", tint = TextPrimary, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.Menu, tr("Menu", "القائمة"), tint = TextPrimary, modifier = Modifier.size(24.dp))
                     }
                     Column(
                         Modifier.weight(1f).clickable { showModelSheet = true },
@@ -433,15 +595,21 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                         Text(
                             chatTitle,
                             color = TextPrimary,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(ElevatedSurface)
+                                .padding(horizontal = 10.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                selectedModel.name,
-                                color = TextSecondary,
+                                selectedModel.name.ifBlank { tr("Auto", "تلقائي") },
+                                color = AccentBlue,
                                 fontSize = 11.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -450,19 +618,33 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                             Icon(Icons.Default.ArrowDropDown, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
                         }
                     }
-                    IconButton(onClick = {
-                        if (!auth.signedIn) {
-                            vm.signIn()
-                        } else {
-                            Toast.makeText(context, "Signed in as " + auth.username, Toast.LENGTH_SHORT).show()
+                    IconButton(onClick = { vm.createNewConversation() }) {
+                        Icon(Icons.Default.Add, tr("New chat", "محادثة جديدة"), tint = TextPrimary, modifier = Modifier.size(24.dp))
+                    }
+                    Box {
+                        IconButton(onClick = { showTopMenu = true }) {
+                            Icon(Icons.Default.MoreVert, tr("More", "المزيد"), tint = TextPrimary, modifier = Modifier.size(24.dp))
                         }
-                    }) {
-                        Icon(
-                            Icons.Default.AccountCircle,
-                            "Account",
-                            tint = if (auth.signedIn) AccentBlue else TextPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        DropdownMenu(expanded = showTopMenu, onDismissRequest = { showTopMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(tr("Export chat", "تصدير المحادثة")) },
+                                onClick = {
+                                    showTopMenu = false
+                                    val exported = messages.joinToString("\n\n") { m ->
+                                        (if (m.isUser) tr("You", "أنت") else "AI") + ":\n" + m.content
+                                    }
+                                    if (exported.isBlank()) {
+                                        Toast.makeText(
+                                            context,
+                                            tr("Nothing to export yet", "لا توجد رسائل بعد"),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        chatShareText(context, exported)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             },
@@ -473,15 +655,15 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                             Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 4.dp)
-                                .background(SecondarySurface, RoundedCornerShape(12.dp))
+                                .background(SecondarySurface, RoundedCornerShape(14.dp))
                                 .padding(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (attachmentMime.startsWith("image/")) {
                                 AsyncImage(
                                     model = attachmentUri,
-                                    contentDescription = "Attachment",
-                                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)),
+                                    contentDescription = tr("Attachment", "المرفق"),
+                                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)),
                                     contentScale = ContentScale.Crop
                                 )
                             } else {
@@ -497,11 +679,11 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = { attachmentUri = null }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Close, "Remove", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Close, tr("Remove", "إزالة"), tint = TextSecondary, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
-                    ChatInputBar(
+                    ComposerBar(
                         input = input,
                         onInputChange = { input = it },
                         onSend = send,
@@ -520,43 +702,75 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
             Box(Modifier.padding(padding).fillMaxSize().background(OledBlack)) {
                 if (messages.isEmpty() && partial == null && errorText == null) {
                     Column(
-                        Modifier.fillMaxSize(),
+                        Modifier.fillMaxSize().padding(horizontal = 20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text("كيف أساعدك اليوم؟", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+                        Box(
+                            Modifier.size(64.dp).background(AccentBlue, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("✦", color = Color.White, fontSize = 26.sp)
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            tr("How can I help you today?", "كيف أقدر أساعدك اليوم؟"),
+                            color = TextPrimary,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(24.dp))
+                        suggestions.chunked(2).forEach { pair ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                pair.forEach { suggestion ->
+                                    SuggestionCard(
+                                        title = suggestion,
+                                        onClick = { input = suggestion },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                if (pair.size < 2) Spacer(Modifier.weight(1f))
+                            }
+                            Spacer(Modifier.height(10.dp))
+                        }
                     }
                 } else {
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 8.dp)
+                        contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
                         items(messages, key = { it.id }) { msg ->
-                            MessageBubble(
-                                text = msg.content,
-                                isUser = msg.isUser,
-                                type = msg.type,
-                                attachmentUri = msg.attachmentUri,
-                                attachmentName = msg.senderName,
-                                showRegenerate = msg.id == lastAiId && !isGenerating,
-                                onRegenerate = { vm.regenerate() },
-                                onSpeak = { vm.speak(msg.content) },
-                                onReport = { vm.reportMessage(msg.id, msg.content) }
-                            )
+                            if (msg.isUser) {
+                                UserMessage(
+                                    text = msg.content,
+                                    type = msg.type,
+                                    attachmentUri = msg.attachmentUri,
+                                    attachmentName = msg.senderName
+                                )
+                            } else {
+                                AssistantMessage(
+                                    text = msg.content,
+                                    showRegenerate = msg.id == lastAiId && !isGenerating,
+                                    onRegenerate = { vm.regenerate() },
+                                    onSpeak = { vm.speak(msg.content) },
+                                    onReport = { vm.reportMessage(msg.id, msg.content) }
+                                )
+                            }
                         }
                         if (partial != null) {
                             item(key = "generating") {
                                 if (partial.isEmpty()) {
-                                    Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) { AnimatedLoadingText() }
+                                    TypingDots()
                                 } else {
-                                    MessageBubble(text = partial, isUser = false, showActions = false)
+                                    AssistantMessage(text = partial, showActions = false)
                                 }
                             }
                         }
                         if (errorText != null) {
                             item(key = "error") {
-                                ErrorBubble(message = errorText, onRetry = { vm.regenerate() })
+                                ErrorCard(message = errorText, onRetry = { vm.regenerate() })
                             }
                         }
                     }
@@ -576,7 +790,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                     }.padding(16.dp)
                 ) {
                     Icon(Icons.Default.Image, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
-                    Text("Image", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(tr("Image", "صورة"), color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 }
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -586,7 +800,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                     }.padding(16.dp)
                 ) {
                     Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
-                    Text("File", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(tr("File", "ملف"), color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -614,22 +828,18 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
             containerColor = CardDark,
             titleContentColor = TextPrimary,
             textContentColor = TextSecondary,
-            title = { Text("Rename chat") },
+            title = { Text(tr("Rename chat", "إعادة تسمية المحادثة")) },
             text = {
-                OutlinedTextField(
-                    value = newTitle,
-                    onValueChange = { newTitle = it },
-                    singleLine = true
-                )
+                OutlinedTextField(value = newTitle, onValueChange = { newTitle = it }, singleLine = true)
             },
             confirmButton = {
                 TextButton(onClick = {
                     vm.renameChat(renaming.id, newTitle)
                     renameTarget = null
-                }) { Text("Save", color = AccentBlue) }
+                }) { Text(tr("Save", "حفظ"), color = AccentBlue) }
             },
             dismissButton = {
-                TextButton(onClick = { renameTarget = null }) { Text("Cancel", color = TextSecondary) }
+                TextButton(onClick = { renameTarget = null }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) }
             }
         )
     }
@@ -641,18 +851,25 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
             containerColor = CardDark,
             titleContentColor = TextPrimary,
             textContentColor = TextSecondary,
-            title = { Text("Delete chat") },
-            text = { Text("Delete " + toDelete.size + " chat(s)? This cannot be undone.") },
+            title = { Text(tr("Delete chat", "حذف المحادثة")) },
+            text = {
+                Text(
+                    tr(
+                        "Delete ${toDelete.size} chat(s)? This cannot be undone.",
+                        "حذف ${toDelete.size} محادثة؟ لا يمكن التراجع عن ذلك."
+                    )
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     toDelete.forEach { vm.deleteChat(it) }
                     vm.isMultiSelectMode = false
                     vm.selectedChatIds.clear()
                     deleteTargets = null
-                }) { Text("Delete", color = Color.Red) }
+                }) { Text(tr("Delete", "حذف"), color = Color.Red) }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTargets = null }) { Text("Cancel", color = TextSecondary) }
+                TextButton(onClick = { deleteTargets = null }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) }
             }
         )
     }

@@ -28,6 +28,8 @@ import com.hiyako.app.util.queryDisplayName
 import com.hiyako.app.providers.AccountStore
 import com.hiyako.app.providers.OpenAiCompatClient
 import com.hiyako.app.providers.ProviderCatalog
+import com.hiyako.app.providers.ModelCache
+import com.hiyako.app.providers.defaultModelOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -428,7 +430,7 @@ class AiViewModel(application: Application) :
             if (image != null) pendingImages[reqId] = image
             val selected = _selectedModel.value
             if (selected.accountId.isNotEmpty()) {
-                streamViaAccount(reqId, selected.accountId, built.messagesJson, image)
+                streamViaAccount(reqId, selected.accountId, selected.id, built.messagesJson, image)
             } else {
                 pendingPayloads[reqId] = built.messagesJson to image
                 engine.ask(reqId, built.messagesJson, selected.id, image != null)
@@ -444,7 +446,7 @@ class AiViewModel(application: Application) :
     }
 
     /** Sends the request to a saved account. On quota or credit errors it moves on to the next saved account. */
-    private fun streamViaAccount(reqId: String, accountId: String, messagesJson: String, imageDataUrl: String?) {
+    private fun streamViaAccount(reqId: String, accountId: String, modelId: String, messagesJson: String, imageDataUrl: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             val accounts = AccountStore.load(appCtx)
             val start = accounts.indexOfFirst { it.id == accountId }
@@ -467,7 +469,7 @@ class AiViewModel(application: Application) :
                 val result = OpenAiCompatClient.stream(
                     baseUrl = account.baseUrl,
                     apiKey = AccountStore.apiKey(account),
-                    model = account.model,
+                    model = if (account.id == accountId) modelId else defaultModelOf(appCtx, account),
                     messages = messages
                 ) { delta ->
                     if (!pending.containsKey(reqId)) throw CancellationException("Stopped by user")
@@ -688,10 +690,10 @@ class AiViewModel(application: Application) :
 
     override fun onError(reqId: String, message: String) {
         val payload = pendingPayloads.remove(reqId)
-        val fallback = AccountStore.load(appCtx).firstOrNull { it.model.isNotBlank() }
+        val fallback = AccountStore.load(appCtx).firstOrNull { defaultModelOf(appCtx, it).isNotBlank() }
         val isCredit = message.contains("credit", ignoreCase = true)
         if (payload != null && fallback != null && isCredit && pending.containsKey(reqId)) {
-            streamViaAccount(reqId, fallback.id, payload.first, payload.second)
+            streamViaAccount(reqId, fallback.id, defaultModelOf(appCtx, fallback), payload.first, payload.second)
         } else {
             failRequest(reqId, message)
         }
@@ -729,6 +731,8 @@ class AiViewModel(application: Application) :
 
 /** Model picker entries for every saved account that has a model name. */
 private fun accountModelsOf(context: Context): List<AiModel> =
-    AccountStore.load(context)
-        .filter { it.model.isNotBlank() }
-        .map { AiModel(name = "${it.label} · ${it.model}", id = it.model, accountId = it.id) }
+    AccountStore.load(context).flatMap { account ->
+        ModelCache.models(context, account.id).map { modelId ->
+            AiModel(name = "$modelId · ${account.label}", id = modelId, accountId = account.id)
+        }
+    }

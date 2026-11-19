@@ -177,7 +177,7 @@ object AccountStore {
         }
     }
 
-    private fun save(context: Context, accounts: List<Account>) {
+    fun save(context: Context, accounts: List<Account>) {
         val array = JSONArray()
         for (a in accounts) {
             array.put(
@@ -215,6 +215,7 @@ object AccountStore {
 
     fun remove(context: Context, accountId: String) {
         save(context, load(context).filterNot { it.id == accountId })
+        ModelCache.remove(context, accountId)
     }
 
     /** Returns the decrypted key, or an empty string when the account has none. Never log the result. */

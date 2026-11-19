@@ -41,6 +41,30 @@ object OpenAiCompatClient {
             message.contains("quota", ignoreCase = true)
     }
 
+    /** Loads the model ids from the provider's /models endpoint. */
+    suspend fun listModels(baseUrl: String, apiKey: String): Result<List<String>> = withContext(Dispatchers.IO) {
+        try {
+            val builder = Request.Builder()
+                .url(baseUrl.trimEnd('/') + "/models")
+                .get()
+                .header("Accept", "application/json")
+            if (apiKey.isNotEmpty()) builder.header("Authorization", "Bearer $apiKey")
+            http.newCall(builder.build()).execute().use { response ->
+                if (!response.isSuccessful) error("HTTP ${response.code}")
+                val body = response.body?.string().orEmpty()
+                val data = JSONObject(body).optJSONArray("data") ?: JSONArray()
+                val ids = (0 until data.length()).mapNotNull { index ->
+                    data.optJSONObject(index)?.optString("id")?.takeIf { it.isNotBlank() }
+                }
+                Result.success(ids.distinct().sorted())
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun stream(
         baseUrl: String,
         apiKey: String,
