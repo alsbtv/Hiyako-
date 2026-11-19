@@ -69,4 +69,5 @@ dependencies {
     implementation("androidx.webkit:webkit:1.8.0")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
 }

@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hiyako.app.NexusService
+import com.hiyako.app.data.WorkspaceManager
 import com.hiyako.app.data.db.AppDatabase
 import com.hiyako.app.data.db.ChatEntity
 import com.hiyako.app.data.db.ConversationEntity
@@ -64,7 +65,6 @@ data class Message(
 )
 
 data class AiModel(val name: String, val id: String, val accountId: String = "")
-
 data class AuthInfo(val signedIn: Boolean, val username: String)
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -81,19 +81,9 @@ class AiViewModel(application: Application) :
 
     private class Pending(val convoId: Int) {
         private val sb = StringBuilder()
-
-        @Volatile
-        var lastActivity: Long = System.currentTimeMillis()
-
-        @Synchronized
-        fun append(t: String): String {
-            sb.append(t)
-            lastActivity = System.currentTimeMillis()
-            return sb.toString()
-        }
-
-        @Synchronized
-        fun text(): String = sb.toString()
+        @Volatile var lastActivity: Long = System.currentTimeMillis()
+        @Synchronized fun append(t: String): String { sb.append(t); lastActivity = System.currentTimeMillis(); return sb.toString() }
+        @Synchronized fun text(): String = sb.toString()
     }
 
     private class SavedAttachment(val file: File, val mime: String, val name: String)
@@ -101,7 +91,6 @@ class AiViewModel(application: Application) :
 
     private val pending = ConcurrentHashMap<String, Pending>()
     private val pendingImages = ConcurrentHashMap<String, String>()
-    // Request payloads kept only for the Puter-to-account fallback on credit errors.
     private val pendingPayloads = ConcurrentHashMap<String, Pair<String, String?>>()
     private val titleFallbacks = ConcurrentHashMap<Int, String>()
     private var requestCounter = 0L
@@ -119,14 +108,7 @@ class AiViewModel(application: Application) :
         .map { list ->
             list.filterNot { it.role == "ai" && it.content == "Thinking..." }
                 .map { e ->
-                    Message(
-                        id = e.id,
-                        content = e.content,
-                        isUser = e.role == "user",
-                        type = e.messageType,
-                        attachmentUri = e.attachmentUri,
-                        senderName = e.senderName
-                    )
+                    Message(e.id, e.content, e.role == "user", e.messageType, e.attachmentUri, e.senderName)
                 }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -135,7 +117,6 @@ class AiViewModel(application: Application) :
         convos.firstOrNull { it.id == id }?.title ?: DEFAULT_TITLE
     }.stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_TITLE)
 
-    // conversationId -> text streamed so far ("" means waiting for the first token)
     private val _generating = MutableStateFlow<Map<Int, String>>(emptyMap())
     val generating: StateFlow<Map<Int, String>> = _generating.asStateFlow()
 
@@ -172,7 +153,6 @@ class AiViewModel(application: Application) :
 
     init {
         tts = TextToSpeech(application, this)
-
         viewModelScope.launch {
             conversationDao.getAllConversations().collect { convos ->
                 _conversations.value = convos
@@ -185,12 +165,7 @@ class AiViewModel(application: Application) :
                 }
             }
         }
-
-        viewModelScope.launch {
-            memoryDao.getAllMemories().collectLatest { _memories.value = it }
-        }
-
-        // Watchdog: fail requests that stopped producing output.
+        viewModelScope.launch { memoryDao.getAllMemories().collectLatest { _memories.value = it } }
         viewModelScope.launch {
             while (true) {
                 delay(5000)
@@ -204,77 +179,42 @@ class AiViewModel(application: Application) :
         }
     }
 
-    // ------------------------------------------------------------------ TTS
-
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) tts?.language = Locale.getDefault()
     }
 
     fun speak(text: String) {
-        val clean = text
-            .replace(Regex("```[\\s\\S]*?```"), " ")
-            .replace("*", "")
-            .replace("#", "")
-            .replace("`", "")
-            .trim()
-            .take(3500)
+        val clean = text.replace(Regex("```[\\s\\S]*?```"), " ").replace("*", "").replace("#", "").replace("`", "").trim().take(3500)
         if (clean.isEmpty()) return
         tts?.language = if (isRtlText(clean)) Locale("ar") else Locale.getDefault()
         tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "nexus_tts")
     }
-
-    // ------------------------------------------------------------------ Simple state
 
     fun toggleThink() { isThinkingMode = !isThinkingMode }
     fun toggleSearch() { isSearchMode = !isSearchMode }
 
     fun selectModel(model: AiModel) {
         _selectedModel.value = model
-        prefs.edit()
-            .putString("model_id", model.id)
-            .putString("model_name", model.name)
-            .putString("model_account", model.accountId)
-            .apply()
+        prefs.edit().putString("model_id", model.id).putString("model_name", model.name).putString("model_account", model.accountId).apply()
     }
 
-    fun updateTheme(mode: String) {
-        themeMode = mode
-        prefs.edit().putString("theme", mode).apply()
-    }
+    fun updateTheme(mode: String) { themeMode = mode; prefs.edit().putString("theme", mode).apply() }
+    fun updateFontSize(size: Float) { fontSize = size; prefs.edit().putFloat("fontSize", size).apply() }
+    fun addMemory(content: String) { viewModelScope.launch { memoryDao.insertMemory(MemoryEntity(content = content)) } }
+    fun clearMemories() { viewModelScope.launch { memoryDao.clearMemories() } }
 
-    fun updateFontSize(size: Float) {
-        fontSize = size
-        prefs.edit().putFloat("fontSize", size).apply()
-    }
-
-    fun addMemory(content: String) {
-        viewModelScope.launch { memoryDao.insertMemory(MemoryEntity(content = content)) }
-    }
-
-    fun clearMemories() {
-        viewModelScope.launch { memoryDao.clearMemories() }
-    }
-
-    fun canSend(): Boolean = engine.ready.value
+    fun canSend(): Boolean = engine.ready.value || _selectedModel.value.accountId.isNotEmpty()
 
     fun refreshModels() = engine.refreshModels()
-
     fun signIn() = engine.signIn()
-
-    // ------------------------------------------------------------------ Conversations
 
     fun createNewConversation() {
         val active = _activeConversationId.value
         if (active != null && messages.value.isEmpty() && !_generating.value.containsKey(active)) return
-        viewModelScope.launch {
-            _activeConversationId.value =
-                conversationDao.insertConversation(ConversationEntity(title = DEFAULT_TITLE)).toInt()
-        }
+        viewModelScope.launch { _activeConversationId.value = conversationDao.insertConversation(ConversationEntity(title = DEFAULT_TITLE)).toInt() }
     }
 
-    fun selectConversation(id: Int) {
-        _activeConversationId.value = id
-    }
+    fun selectConversation(id: Int) { _activeConversationId.value = id }
 
     fun deleteChat(id: Int) {
         cancelRequestsFor(id)
@@ -290,17 +230,12 @@ class AiViewModel(application: Application) :
         viewModelScope.launch { conversationDao.updateTitle(id, clean) }
     }
 
-    fun togglePin(id: Int, isPinned: Boolean) {
-        viewModelScope.launch { conversationDao.updatePin(id, isPinned) }
-    }
+    fun togglePin(id: Int, isPinned: Boolean) { viewModelScope.launch { conversationDao.updatePin(id, isPinned) } }
 
-    /** Saves a report for an AI reply. Reports stay on this device until a moderation backend exists. */
     fun reportMessage(messageId: Int, content: String) {
         val conversationId = _activeConversationId.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            db.reportDao().insert(
-                ReportEntity(messageId = messageId, conversationId = conversationId, content = content)
-            )
+            db.reportDao().insert(ReportEntity(messageId = messageId, conversationId = conversationId, content = content))
         }
     }
 
@@ -324,8 +259,6 @@ class AiViewModel(application: Application) :
         _errors.update { it - convoId }
         stopServiceIfIdle()
     }
-
-    // ------------------------------------------------------------------ Sending
 
     private fun markGenerating(convoId: Int): Boolean {
         if (_generating.value.containsKey(convoId)) return false
@@ -354,18 +287,8 @@ class AiViewModel(application: Application) :
                     storedUri = Uri.fromFile(saved.file).toString()
                     displayName = saved.name
                 }
-                chatDao.insertMessage(
-                    ChatEntity(
-                        conversationId = convoId,
-                        role = "user",
-                        content = trimmed,
-                        messageType = type,
-                        attachmentUri = storedUri,
-                        senderName = displayName
-                    )
-                )
+                chatDao.insertMessage(ChatEntity(conversationId = convoId, role = "user", content = trimmed, messageType = type, attachmentUri = storedUri, senderName = displayName))
                 conversationDao.touch(convoId, System.currentTimeMillis())
-
                 if (needsTitle) {
                     val seed = if (trimmed.isNotEmpty()) trimmed else (displayName ?: "Attachment")
                     val fallback = seed.lines().first().trim().take(32).ifBlank { DEFAULT_TITLE }
@@ -440,12 +363,10 @@ class AiViewModel(application: Application) :
         }
     }
 
-    /** Refreshes the model picker after accounts are added or removed in Settings. */
     fun reloadAccountModels() {
         _availableModels.update { list -> list.filter { it.accountId.isEmpty() } + accountModelsOf(appCtx) }
     }
 
-    /** Sends the request to a saved account. On quota or credit errors it moves on to the next saved account. */
     private fun streamViaAccount(reqId: String, accountId: String, modelId: String, messagesJson: String, imageDataUrl: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             val accounts = AccountStore.load(appCtx)
@@ -486,7 +407,6 @@ class AiViewModel(application: Application) :
         }
     }
 
-    /** Converts the request into OpenAI format; the image becomes an image_url part on the last user message. */
     private fun buildAccountMessages(messagesJson: String, imageDataUrl: String?): JSONArray {
         val array = JSONArray(messagesJson)
         if (imageDataUrl != null) {
@@ -495,11 +415,7 @@ class AiViewModel(application: Application) :
                 if (message.optString("role") == "user") {
                     val parts = JSONArray()
                         .put(JSONObject().put("type", "text").put("text", message.optString("content")))
-                        .put(
-                            JSONObject()
-                                .put("type", "image_url")
-                                .put("image_url", JSONObject().put("url", imageDataUrl))
-                        )
+                        .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", imageDataUrl)))
                     message.put("content", parts)
                     break
                 }
@@ -518,20 +434,25 @@ class AiViewModel(application: Application) :
             system.append("\n\nKnown facts about the user:\n")
             mem.forEach { system.append("- ").append(it.content.take(300)).append('\n') }
         }
-        if (isThinkingMode) {
-            system.append("\n\nThink through the problem carefully and step by step before giving the final answer.")
+        
+        if (WorkspaceManager.isLoaded) {
+            system.append("\n\nActive repository: ").append(WorkspaceManager.activeRepo).append('\n')
+            var budget = 60000
+            for ((path, content) in WorkspaceManager.projectFiles) {
+                if (budget <= 0) break
+                val chunk = content.take(minOf(budget, 6000))
+                system.append("\n=== ").append(path).append(" ===\n").append(chunk).append('\n')
+                budget -= chunk.length
+            }
         }
-        if (isSearchMode) {
-            system.append("\n\nThe user turned on Search mode, but you cannot browse the web in this app. ")
-            system.append("If the answer depends on recent information, say so clearly instead of guessing.")
-        }
+
+        if (isThinkingMode) system.append("\n\nThink through the problem carefully and step by step before giving the final answer.")
+        if (isSearchMode) system.append("\n\nThe user turned on Search mode, but you cannot browse the web in this app. If the answer depends on recent information, say so clearly instead of guessing.")
 
         val arr = JSONArray()
         arr.put(JSONObject().put("role", "system").put("content", system.toString()))
 
-        val recent = entities
-            .filterNot { it.role == "ai" && it.content == "Thinking..." }
-            .takeLast(MAX_HISTORY)
+        val recent = entities.filterNot { it.role == "ai" && it.content == "Thinking..." }.takeLast(30)
 
         for (e in recent) {
             val role = if (e.role == "user") "user" else "assistant"
@@ -539,11 +460,7 @@ class AiViewModel(application: Application) :
             if (role == "user" && e.messageType == "FILE") {
                 val name = e.senderName ?: "file"
                 val fileText = readTextAttachment(e.attachmentUri)
-                content += if (fileText != null) {
-                    "\n\n[Attached file: $name]\n```\n$fileText\n```"
-                } else {
-                    "\n\n[Attached file: $name - this file type cannot be read in this version of the app]"
-                }
+                content += if (fileText != null) "\n\n[Attached file: $name]\n```\n$fileText\n```" else "\n\n[Attached file: $name - this file type cannot be read in this version of the app]"
             }
             arr.put(JSONObject().put("role", role).put("content", content))
         }
@@ -579,9 +496,7 @@ class AiViewModel(application: Application) :
         val file = File(path)
         if (!file.exists() || file.length() > 5_000_000L) return null
         val bytes = file.readBytes()
-        for (b in bytes) {
-            if (b.toInt() == 0) return null
-        }
+        for (b in bytes) { if (b.toInt() == 0) return null }
         return String(bytes, Charsets.UTF_8).take(40000)
     }
 
@@ -596,30 +511,21 @@ class AiViewModel(application: Application) :
         opts.inSampleSize = sample
         val bitmap = BitmapFactory.decodeFile(file.absolutePath, opts) ?: return null
         val out = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        val format = if (bitmap.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+        bitmap.compress(format, 85, out)
         bitmap.recycle()
         return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
 
-    // ------------------------------------------------------------------ Foreground service
-
     private fun startServiceSafely() {
-        try {
-            ContextCompat.startForegroundService(appCtx, Intent(appCtx, NexusService::class.java))
-        } catch (e: Exception) {
-            // The service only keeps the process alive in the background; chat works without it.
-        }
+        try { ContextCompat.startForegroundService(appCtx, Intent(appCtx, NexusService::class.java)) } catch (e: Exception) {}
     }
 
     private fun stopServiceIfIdle() {
         viewModelScope.launch {
             delay(1500)
             if (pending.isEmpty()) {
-                try {
-                    appCtx.stopService(Intent(appCtx, NexusService::class.java))
-                } catch (e: Exception) {
-                    // ignore
-                }
+                try { appCtx.stopService(Intent(appCtx, NexusService::class.java)) } catch (e: Exception) {}
             }
         }
     }
@@ -640,10 +546,7 @@ class AiViewModel(application: Application) :
         }
     }
 
-    // ------------------------------------------------------------------ PuterListener (called from the WebView bridge thread)
-
     override fun onEngineReady() {}
-
     override fun onModelsReceived(json: String) {
         try {
             val arr = JSONArray(json)
@@ -651,16 +554,11 @@ class AiViewModel(application: Application) :
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
                 val id = o.optString("id")
-                if (id.isNotBlank()) {
-                    val name = o.optString("name", id).ifBlank { id }
-                    list.add(AiModel(name, id))
-                }
+                if (id.isNotBlank()) list.add(AiModel(o.optString("name", id).ifBlank { id }, id))
             }
             val sorted = list.distinctBy { it.id }.sortedBy { it.name.lowercase() }
             _availableModels.value = listOf(AiModel("Default (Auto)", "")) + sorted + accountModelsOf(appCtx)
-        } catch (e: Exception) {
-            // ignore malformed payload
-        }
+        } catch (e: Exception) {}
     }
 
     override fun onChunk(reqId: String, text: String) {
@@ -691,8 +589,8 @@ class AiViewModel(application: Application) :
     override fun onError(reqId: String, message: String) {
         val payload = pendingPayloads.remove(reqId)
         val fallback = AccountStore.load(appCtx).firstOrNull { defaultModelOf(appCtx, it).isNotBlank() }
-        val isCredit = message.contains("credit", ignoreCase = true)
-        if (payload != null && fallback != null && isCredit && pending.containsKey(reqId)) {
+        val isQuota = OpenAiCompatClient.isQuotaError(Exception(message))
+        if (payload != null && fallback != null && isQuota && pending.containsKey(reqId)) {
             streamViaAccount(reqId, fallback.id, defaultModelOf(appCtx, fallback), payload.first, payload.second)
         } else {
             failRequest(reqId, message)
@@ -710,10 +608,7 @@ class AiViewModel(application: Application) :
         }
     }
 
-    override fun onAuth(signedIn: Boolean, username: String) {
-        _auth.value = AuthInfo(signedIn, username)
-    }
-
+    override fun onAuth(signedIn: Boolean, username: String) { _auth.value = AuthInfo(signedIn, username) }
     override fun provideImage(reqId: String): String = pendingImages[reqId] ?: ""
 
     override fun onCleared() {
@@ -725,11 +620,9 @@ class AiViewModel(application: Application) :
     companion object {
         private const val DEFAULT_TITLE = "New Chat"
         private const val REQUEST_TIMEOUT_MS = 120_000L
-        private const val MAX_HISTORY = 30
     }
 }
 
-/** Model picker entries for every saved account that has a model name. */
 private fun accountModelsOf(context: Context): List<AiModel> =
     AccountStore.load(context).flatMap { account ->
         ModelCache.models(context, account.id).map { modelId ->

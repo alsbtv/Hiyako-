@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hiyako.app.ui.i18n.tr
 import com.hiyako.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -29,6 +30,7 @@ fun WorkspaceScreen(onBack: () -> Unit, onRepoSelected: () -> Unit, onNavigateTo
     val repos by vm.repos.collectAsState()
     val isLoading by vm.isLoading.collectAsState()
     val loadingMessage by vm.loadingMessage.collectAsState()
+    val error by vm.error.collectAsState()
     var inputToken by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) { vm.loadToken(context) }
@@ -37,7 +39,7 @@ fun WorkspaceScreen(onBack: () -> Unit, onRepoSelected: () -> Unit, onNavigateTo
         containerColor = OledBlack,
         topBar = {
             TopAppBar(
-                title = { Text("Workspace (GitHub)", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(tr("Workspace (GitHub)", "مساحة العمل (GitHub)"), color = TextPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null, tint = TextPrimary) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
             )
@@ -52,7 +54,7 @@ fun WorkspaceScreen(onBack: () -> Unit, onRepoSelected: () -> Unit, onNavigateTo
                 }
             } else if (token.isBlank()) {
                 Column {
-                    Text("Enter your GitHub Personal Access Token to connect:", color = TextSecondary)
+                    Text(tr("Enter your GitHub Personal Access Token to connect:", "أدخل رمز الوصول الشخصي (GitHub Token) للاتصال:"), color = TextSecondary)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = inputToken, onValueChange = { inputToken = it }, placeholder = { Text("ghp_...", color = TextSecondary) },
@@ -62,22 +64,27 @@ fun WorkspaceScreen(onBack: () -> Unit, onRepoSelected: () -> Unit, onNavigateTo
                     )
                     Spacer(Modifier.height(16.dp))
                     Button(onClick = { vm.saveToken(context, inputToken) }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = AccentBlue), shape = RoundedCornerShape(8.dp)) {
-                        Text("Connect to GitHub", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(tr("Connect to GitHub", "اتصال بـ GitHub"), color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             } else {
                 Column {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Your Repositories", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text(tr("Your Repositories", "مستودعاتك"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Row {
-                            TextButton(onClick = { onNavigateToUpdater() }) { Text("Update App", color = AccentBlue) }
-                            TextButton(onClick = { vm.fetchRepos() }) { Text("Refresh", color = AccentBlue) }
+                            TextButton(onClick = { onNavigateToUpdater() }) { Text(tr("Update App", "تحديث التطبيق"), color = AccentBlue) }
+                            TextButton(onClick = { vm.fetchRepos() }) { Text(tr("Refresh", "تحديث"), color = AccentBlue) }
+                            TextButton(onClick = { vm.saveToken(context, ""); inputToken = "" }) { Text(tr("Disconnect", "قطع الاتصال"), color = Color.Red) }
                         }
                     }
                     Spacer(Modifier.height(8.dp))
                     
+                    if (error != null) {
+                        Text(error!!, color = Color.Red, modifier = Modifier.padding(bottom = 8.dp))
+                    }
+
                     if (repos.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No repositories found.", color = TextSecondary) }
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(tr("No repositories found.", "لا توجد مستودعات."), color = TextSecondary) }
                     } else {
                         LazyColumn {
                             items(repos) { repo ->

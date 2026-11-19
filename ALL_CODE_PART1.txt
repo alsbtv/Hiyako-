@@ -1,0 +1,2084 @@
+========================================
+FILE: ./app/build.gradle.kts
+========================================
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp")
+}
+
+android {
+    namespace = "com.hiyako.app"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.hiyako.app"
+        minSdk = 26
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("hiyako.keystore")
+            storePassword = "android"
+            keyAlias = "hiyakokey"
+            keyPassword = "android"
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("release")
+        }
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+    buildFeatures {
+        compose = true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.8"
+    }
+}
+
+dependencies {
+    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.media3:media3-exoplayer:1.2.1")
+    implementation("androidx.media3:media3-ui:1.2.1")
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.webkit:webkit:1.8.0")
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+}
+
+
+========================================
+FILE: ./app/src/main/AndroidManifest.xml
+========================================
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="Nexus AI"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Hiyako">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|uiMode|density|fontScale|layoutDirection|locale"
+            android:theme="@style/Theme.Hiyako"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <service
+            android:name=".NexusService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+</manifest>
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/HiyakoApplication.kt
+========================================
+package com.hiyako.app
+import android.app.Application
+class HiyakoApplication : Application()
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/MainActivity.kt
+========================================
+package com.hiyako.app
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hiyako.app.ui.screens.AiViewModel
+import com.hiyako.app.ui.screens.ChatScreen
+import com.hiyako.app.ui.screens.MemoryScreen
+import com.hiyako.app.ui.screens.SettingsScreen
+import com.hiyako.app.ui.screens.UpdaterScreen
+import com.hiyako.app.ui.screens.WorkspaceScreen
+import com.hiyako.app.ui.theme.AppTheme
+import com.hiyako.app.ui.theme.OledBlack
+import com.hiyako.app.ui.theme.TextPrimary
+
+class MainActivity : ComponentActivity() {
+
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        setContent {
+            val aiViewModel: AiViewModel = viewModel()
+            val darkTheme = when (aiViewModel.themeMode) {
+                "Light" -> false
+                "Dark" -> true
+                else -> isSystemInDarkTheme()
+            }
+            val density = LocalDensity.current
+
+            CompositionLocalProvider(LocalDensity provides Density(density.density, aiViewModel.fontSize)) {
+                AppTheme(darkTheme = darkTheme) {
+                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        AppRoot(aiViewModel)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppRoot(vm: AiViewModel) {
+    var screenState by remember { mutableStateOf("chat") }
+    var showEngineHost by remember { mutableStateOf(false) }
+
+    // Create the hidden Puter WebView only after the first frame so app start-up is not delayed.
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        showEngineHost = true
+    }
+
+    BackHandler(enabled = screenState != "chat") {
+        screenState = if (screenState == "settings") "chat" else "settings"
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        when (screenState) {
+            "workspace" -> WorkspaceScreen(
+                onBack = { screenState = "settings" },
+                onRepoSelected = { screenState = "chat" },
+                onNavigateToUpdater = { screenState = "updater" }
+            )
+            "updater" -> UpdaterScreen(onBack = { screenState = "settings" })
+            "memory" -> MemoryScreen(onBack = { screenState = "settings" }, vm = vm)
+            "settings" -> SettingsScreen(
+                onBack = { screenState = "chat" },
+                onNavigateToWorkspace = { screenState = "workspace" },
+                onNavigateToUpdater = { screenState = "updater" },
+                onNavigateToMemory = { screenState = "memory" },
+                onSignIn = {
+                    vm.signIn()
+                    screenState = "chat"
+                },
+                onClearChat = { vm.clearAllChats() },
+                vm = vm
+            )
+            else -> ChatScreen(onNavigateToSettings = { screenState = "settings" }, vm = vm)
+        }
+
+        if (showEngineHost) {
+            EngineHost(vm)
+        }
+    }
+}
+
+/**
+ * Keeps the hidden Puter WebView attached for the whole app lifetime, and shows
+ * Puter's sign-in popup window on top of everything when it asks for one.
+ */
+@Composable
+private fun EngineHost(vm: AiViewModel) {
+    val engine = vm.engine
+    val popup by engine.popup.collectAsState()
+
+    AndroidView(
+        factory = { engine.webView },
+        modifier = Modifier.size(1.dp).alpha(0f)
+    )
+
+    BackHandler(enabled = popup != null) { engine.closePopup() }
+
+    val popupView = popup
+    if (popupView != null) {
+        Column(Modifier.fillMaxSize().background(OledBlack)) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { engine.closePopup() }) {
+                    Icon(Icons.Default.Close, "Close", tint = TextPrimary)
+                }
+                Text("Puter sign-in", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+            AndroidView(
+                factory = { popupView },
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        }
+    }
+}
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/NexusService.kt
+========================================
+package com.hiyako.app
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Intent
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import androidx.core.app.NotificationCompat
+
+class NexusService : Service() {
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "NexusAI::ProcessingWakeLock")
+        wakeLock?.acquire(10 * 60 * 1000L) // 10 minutes max
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val channelId = "nexus_fg_channel"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, "Nexus AI Processing", NotificationManager.IMPORTANCE_LOW)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("Nexus AI is working...")
+            .setContentText("Generating response in the background")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setOngoing(true)
+            .build()
+
+        startForeground(1, notification)
+        return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        wakeLock?.let { if (it.isHeld) it.release() }
+        super.onDestroy()
+    }
+}
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/data/GitHubApi.kt
+========================================
+package com.hiyako.app.data
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.Base64
+
+data class Repo(val name: String, val fullName: String, val defaultBranch: String)
+
+object GitHubApi {
+    private val client = OkHttpClient.Builder().build()
+    private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+
+    private fun authRequest(url: String, token: String) = Request.Builder()
+        .url(url)
+        .header("Authorization", "Bearer $token")
+        .header("Accept", "application/vnd.github.v3+json")
+        .build()
+
+    suspend fun getUserRepos(token: String): List<Repo> = withContext(Dispatchers.IO) {
+        try {
+            client.newCall(authRequest("https://api.github.com/user/repos", token)).execute().use { response ->
+                if (!response.isSuccessful) return@withContext emptyList()
+                val jsonArray = JSONArray(response.body?.string() ?: "[]")
+                val repos = mutableListOf<Repo>()
+                for (i in 0 until jsonArray.length()) {
+                    val repo = jsonArray.getJSONObject(i)
+                    repos.add(Repo(repo.getString("name"), repo.getString("full_name"), repo.getString("default_branch")))
+                }
+                return@withContext repos
+            }
+        } catch (e: Exception) { return@withContext emptyList() }
+    }
+
+    suspend fun getRepoFiles(token: String, owner: String, repo: String, branch: String): List<String> = withContext(Dispatchers.IO) {
+        val files = mutableListOf<String>()
+        try {
+            val url = "https://api.github.com/repos/$owner/$repo/git/trees/$branch?recursive=1"
+            client.newCall(authRequest(url, token)).execute().use { response ->
+                if (!response.isSuccessful) return@withContext emptyList()
+                val tree = JSONObject(response.body?.string() ?: "{}").optJSONArray("tree") ?: return@withContext emptyList()
+                for (i in 0 until tree.length()) {
+                    val item = tree.getJSONObject(i)
+                    if (item.getString("type") == "blob") {
+                        val path = item.getString("path")
+                        if (!path.contains("build/") && !path.contains(".git/") && (path.endsWith(".kt") || path.endsWith(".xml") || path.endsWith(".kts") || path.endsWith(".gradle"))) {
+                            files.add(path)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        return@withContext files
+    }
+
+    suspend fun getFileContent(token: String, owner: String, repo: String, path: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://api.github.com/repos/$owner/$repo/contents/$path"
+            client.newCall(authRequest(url, token)).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                val contentBase64 = JSONObject(response.body?.string() ?: "{}").optString("content").replace("\n", "")
+                if (contentBase64.isBlank()) return@withContext null
+                String(Base64.getDecoder().decode(contentBase64))
+            }
+        } catch (e: Exception) { return@withContext null }
+    }
+
+    private suspend fun getFileSha(token: String, owner: String, repo: String, path: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://api.github.com/repos/$owner/$repo/contents/$path"
+            client.newCall(authRequest(url, token)).execute().use { response ->
+                if (response.isSuccessful) {
+                    return@withContext JSONObject(response.body?.string() ?: "{}").optString("sha")
+                }
+            }
+        } catch (e: Exception) {}
+        return@withContext null
+    }
+
+    suspend fun updateFile(token: String, owner: String, repo: String, path: String, newContent: String, commitMessage: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val sha = getFileSha(token, owner, repo, path)
+            val payload = JSONObject().apply {
+                put("message", commitMessage)
+                put("content", Base64.getEncoder().encodeToString(newContent.toByteArray()))
+                if (sha != null) put("sha", sha)
+            }
+            
+            val request = Request.Builder()
+                .url("https://api.github.com/repos/$owner/$repo/contents/$path")
+                .header("Authorization", "Bearer $token")
+                .header("Accept", "application/vnd.github.v3+json")
+                .put(payload.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            client.newCall(request).execute().use { response -> return@withContext response.isSuccessful }
+        } catch (e: Exception) { return@withContext false }
+    }
+
+    // دالة حذف الملفات
+    suspend fun deleteFile(token: String, owner: String, repo: String, path: String, commitMessage: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val sha = getFileSha(token, owner, repo, path) ?: return@withContext false
+            val payload = JSONObject().apply {
+                put("message", commitMessage)
+                put("sha", sha)
+            }
+            
+            val request = Request.Builder()
+                .url("https://api.github.com/repos/$owner/$repo/contents/$path")
+                .header("Authorization", "Bearer $token")
+                .header("Accept", "application/vnd.github.v3+json")
+                .delete(payload.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            client.newCall(request).execute().use { response -> return@withContext response.isSuccessful }
+        } catch (e: Exception) { return@withContext false }
+    }
+}
+
+object WorkspaceManager {
+    var activeRepo: String = ""
+    var projectFiles: Map<String, String> = emptyMap()
+    var isLoaded: Boolean = false
+}
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/data/db/ChatDatabase.kt
+========================================
+package com.hiyako.app.data.db
+
+import android.content.Context
+import androidx.room.*
+import kotlinx.coroutines.flow.Flow
+
+@Entity(tableName = "conversations")
+data class ConversationEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val title: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    val isPinned: Boolean = false,
+    val isGroup: Boolean = false,
+    val groupModelsJson: String = "[]" // تخزين النماذج المشاركة في القروب
+)
+
+@Entity(tableName = "chat_messages")
+data class ChatEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val conversationId: Int,
+    val role: String, // "user", "ai", "system"
+    val content: String,
+    val messageType: String = "TEXT", // "TEXT", "IMAGE", "FILE", "AUDIO", "VIDEO"
+    val attachmentUri: String? = null,
+    val senderName: String? = null, // اسم النموذج في القروب / اسم الملف المرفق
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "memories")
+data class MemoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val content: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Dao
+interface ChatDao {
+    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC")
+    fun getMessagesForChat(conversationId: Int): Flow<List<ChatEntity>>
+
+    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC")
+    suspend fun getMessagesOnce(conversationId: Int): List<ChatEntity>
+
+    @Insert
+    suspend fun insertMessage(message: ChatEntity)
+
+    @Query("DELETE FROM chat_messages WHERE id = :messageId")
+    suspend fun deleteMessage(messageId: Int)
+
+    @Query("DELETE FROM chat_messages WHERE role = 'ai' AND content = 'Thinking...' AND conversationId = :conversationId")
+    suspend fun deleteThinkingMessage(conversationId: Int)
+
+    @Query("DELETE FROM chat_messages WHERE conversationId = :conversationId")
+    suspend fun clearChat(conversationId: Int)
+
+    @Query("DELETE FROM chat_messages")
+    suspend fun clearAllMessages()
+}
+
+@Dao
+interface ConversationDao {
+    @Query("SELECT * FROM conversations ORDER BY isPinned DESC, timestamp DESC")
+    fun getAllConversations(): Flow<List<ConversationEntity>>
+
+    @Insert
+    suspend fun insertConversation(conversation: ConversationEntity): Long
+
+    @Query("UPDATE conversations SET title = :newTitle WHERE id = :conversationId")
+    suspend fun updateTitle(conversationId: Int, newTitle: String)
+
+    @Query("UPDATE conversations SET isPinned = :isPinned WHERE id = :conversationId")
+    suspend fun updatePin(conversationId: Int, isPinned: Boolean)
+
+    @Query("UPDATE conversations SET timestamp = :timestamp WHERE id = :conversationId")
+    suspend fun touch(conversationId: Int, timestamp: Long)
+
+    @Query("DELETE FROM conversations WHERE id = :conversationId")
+    suspend fun deleteConversation(conversationId: Int)
+
+    @Query("DELETE FROM conversations")
+    suspend fun deleteAllConversations()
+}
+
+@Dao
+interface MemoryDao {
+    @Query("SELECT * FROM memories ORDER BY timestamp DESC")
+    fun getAllMemories(): Flow<List<MemoryEntity>>
+
+    @Insert
+    suspend fun insertMemory(memory: MemoryEntity)
+
+    @Query("DELETE FROM memories")
+    suspend fun clearMemories()
+}
+
+@Database(entities = [ChatEntity::class, ConversationEntity::class, MemoryEntity::class, ReportEntity::class], version = 5, exportSchema = false)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun chatDao(): ChatDao
+    abstract fun conversationDao(): ConversationDao
+    abstract fun memoryDao(): MemoryDao
+    abstract fun reportDao(): ReportDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: AppDatabase? = null
+
+        fun getDatabase(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "nexus_database"
+                ).addMigrations(MIGRATION_4_5).fallbackToDestructiveMigration().build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
+}
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/data/db/ReportDb.kt
+========================================
+package com.hiyako.app.data.db
+
+import androidx.room.Dao
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.PrimaryKey
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+
+/** A report a user filed for an AI reply. Stored on the device until a moderation backend exists. */
+@Entity(tableName = "reports")
+data class ReportEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val messageId: Int,
+    val conversationId: Int,
+    val content: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Dao
+interface ReportDao {
+    @Insert
+    suspend fun insert(report: ReportEntity)
+}
+
+/** Adds the reports table. Must match the ReportEntity column definitions exactly. */
+val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            "CREATE TABLE IF NOT EXISTS `reports` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`messageId` INTEGER NOT NULL, " +
+                "`conversationId` INTEGER NOT NULL, " +
+                "`content` TEXT NOT NULL, " +
+                "`createdAt` INTEGER NOT NULL)"
+        )
+    }
+}
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/engine/PuterEngine.kt
+========================================
+package com.hiyako.app.engine
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.os.Message
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONObject
+
+interface PuterListener {
+    fun onEngineReady()
+    fun onModelsReceived(json: String)
+    fun onChunk(reqId: String, text: String)
+    fun onDone(reqId: String)
+    fun onError(reqId: String, message: String)
+    fun onTitle(convoId: Int, title: String)
+    fun onAuth(signedIn: Boolean, username: String)
+    fun provideImage(reqId: String): String
+}
+
+/**
+ * Owns the hidden WebView that runs Puter.js. It lives as long as the ViewModel,
+ * so switching screens never destroys the page or an in-flight request.
+ */
+class PuterEngine(context: Context, private val listener: PuterListener) {
+
+    private val appContext: Context = context.applicationContext
+
+    private val _ready = MutableStateFlow(false)
+    val ready: StateFlow<Boolean> = _ready.asStateFlow()
+
+    private val _popup = MutableStateFlow<WebView?>(null)
+    val popup: StateFlow<WebView?> = _popup.asStateFlow()
+
+    val webView: WebView
+
+    init {
+        webView = createWebView()
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun createWebView(): WebView {
+        val wv = WebView(appContext)
+        wv.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        wv.settings.javaScriptEnabled = true
+        wv.settings.domStorageEnabled = true
+        wv.settings.setSupportMultipleWindows(true)
+        wv.settings.javaScriptCanOpenWindowsAutomatically = true
+        wv.webViewClient = WebViewClient()
+        wv.webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message?
+            ): Boolean {
+                if (resultMsg == null) return false
+                val popupView = WebView(appContext)
+                popupView.settings.javaScriptEnabled = true
+                popupView.settings.domStorageEnabled = true
+                popupView.settings.javaScriptCanOpenWindowsAutomatically = true
+                popupView.webViewClient = WebViewClient()
+                popupView.webChromeClient = object : WebChromeClient() {
+                    override fun onCloseWindow(window: WebView?) {
+                        closePopup()
+                    }
+                }
+                val transport = resultMsg.obj as WebView.WebViewTransport
+                transport.webView = popupView
+                resultMsg.sendToTarget()
+                _popup.value = popupView
+                return true
+            }
+        }
+        wv.addJavascriptInterface(Bridge(), "AndroidBridge")
+        wv.loadDataWithBaseURL(BASE_URL, PAGE_HTML, "text/html", "UTF-8", null)
+        return wv
+    }
+
+    fun closePopup() {
+        val p = _popup.value
+        _popup.value = null
+        if (p != null) {
+            p.post {
+                try {
+                    p.stopLoading()
+                    p.loadUrl("about:blank")
+                } catch (e: Exception) {
+                    // ignore
+                }
+            }
+        }
+    }
+
+    fun ask(reqId: String, messagesJson: String, model: String, hasImage: Boolean) {
+        val js = "window.ask(" + JSONObject.quote(reqId) + "," + JSONObject.quote(messagesJson) + "," +
+            JSONObject.quote(model) + "," + hasImage + ");"
+        run(js)
+    }
+
+    fun makeTitle(convoId: Int, text: String) {
+        run("window.makeTitle(" + convoId + "," + JSONObject.quote(text) + ");")
+    }
+
+    fun refreshModels() {
+        run("window.fetchModels();")
+    }
+
+    fun checkAuth() {
+        run("window.checkAuth();")
+    }
+
+    fun signIn() {
+        run("window.signIn();")
+    }
+
+    fun reload() {
+        _ready.value = false
+        webView.post { webView.loadDataWithBaseURL(BASE_URL, PAGE_HTML, "text/html", "UTF-8", null) }
+    }
+
+    fun destroy() {
+        try {
+            webView.destroy()
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
+    private fun run(js: String) {
+        webView.post { webView.evaluateJavascript(js, null) }
+    }
+
+    inner class Bridge {
+        @JavascriptInterface
+        fun onReady() {
+            _ready.value = true
+            listener.onEngineReady()
+        }
+
+        @JavascriptInterface
+        fun onModels(json: String) {
+            listener.onModelsReceived(json)
+        }
+
+        @JavascriptInterface
+        fun onChunk(reqId: String, text: String) {
+            listener.onChunk(reqId, text)
+        }
+
+        @JavascriptInterface
+        fun onDone(reqId: String) {
+            listener.onDone(reqId)
+        }
+
+        @JavascriptInterface
+        fun onError(reqId: String, message: String) {
+            listener.onError(reqId, message)
+        }
+
+        @JavascriptInterface
+        fun onTitle(convoId: String, title: String) {
+            val id = convoId.toIntOrNull() ?: return
+            listener.onTitle(id, title)
+        }
+
+        @JavascriptInterface
+        fun onAuth(signedIn: String, username: String) {
+            listener.onAuth(signedIn == "true", username)
+        }
+
+        @JavascriptInterface
+        fun getImage(reqId: String): String {
+            return listener.provideImage(reqId)
+        }
+    }
+
+    companion object {
+        // Keep this base URL identical to the old version so an existing Puter session in localStorage survives.
+        private const val BASE_URL = "https://appassets.androidplatform.net"
+
+        private val PAGE_HTML = """
+            <html><head><meta charset='utf-8'><script src='https://js.puter.com/v2/'></script></head><body>
+            <script>
+            function errText(e) {
+                try {
+                    if (!e) return 'Unknown error';
+                    if (typeof e === 'string') return e;
+                    if (e.message) return e.message;
+                    if (e.error && e.error.message) return e.error.message;
+                    if (e.error && typeof e.error === 'string') return e.error;
+                    return JSON.stringify(e);
+                } catch (x) { return 'Unknown error'; }
+            }
+            function contentText(c) {
+                if (c === null || c === undefined) return '';
+                if (typeof c === 'string') return c;
+                if (Array.isArray(c)) {
+                    return c.map(function (p) { return (p && p.text) ? p.text : (typeof p === 'string' ? p : ''); }).join('');
+                }
+                if (c.text) return c.text;
+                return JSON.stringify(c);
+            }
+            function respText(r) {
+                if (r === null || r === undefined) return '';
+                if (typeof r === 'string') return r;
+                if (r.message) return contentText(r.message.content);
+                if (r.text) return r.text;
+                return JSON.stringify(r);
+            }
+            window.fetchModels = function () {
+                try {
+                    puter.ai.listModels().then(function (models) {
+                        var result = models.map(function (m) {
+                            if (typeof m === 'string') return { id: m, name: m };
+                            return { id: m.id, name: m.name || m.id };
+                        });
+                        AndroidBridge.onModels(JSON.stringify(result));
+                    }).catch(function (e) {});
+                } catch (e) {}
+            };
+            window.ask = async function (reqId, msgsJson, model, hasImage) {
+                try {
+                    var msgs = JSON.parse(msgsJson);
+                    var opts = {};
+                    if (model) { opts.model = model; }
+                    var resp;
+                    if (hasImage) {
+                        var img = AndroidBridge.getImage(reqId);
+                        var prompt = contentText(msgs[msgs.length - 1].content);
+                        resp = await puter.ai.chat(prompt, img, false, opts);
+                    } else {
+                        opts.stream = true;
+                        resp = await puter.ai.chat(msgs, false, opts);
+                    }
+                    if (resp && resp.success === false) { throw resp; }
+                    if (resp && typeof resp[Symbol.asyncIterator] === 'function') {
+                        for await (var part of resp) {
+                            if (part && part.text) { AndroidBridge.onChunk(reqId, part.text); }
+                        }
+                    } else {
+                        var t = respText(resp);
+                        if (t) { AndroidBridge.onChunk(reqId, t); }
+                    }
+                    AndroidBridge.onDone(reqId);
+                } catch (e) {
+                    AndroidBridge.onError(reqId, errText(e));
+                }
+            };
+            window.makeTitle = function (convoId, text) {
+                try {
+                    var p = 'Write a short title (2 to 5 words) for a conversation that starts with the message below. Use the same language as the message. Output ONLY the title, with no quotes and no trailing punctuation.\n\nMessage: ' + String(text).substring(0, 300);
+                    puter.ai.chat(p).then(function (r) {
+                        var t = respText(r);
+                        if (t) { AndroidBridge.onTitle(String(convoId), t.trim()); }
+                    }).catch(function (e) {});
+                } catch (e) {}
+            };
+            window.checkAuth = function () {
+                try {
+                    if (puter.auth.isSignedIn()) {
+                        puter.auth.getUser().then(function (u) {
+                            AndroidBridge.onAuth('true', (u && u.username) ? u.username : '');
+                        }).catch(function (e) { AndroidBridge.onAuth('true', ''); });
+                    } else {
+                        AndroidBridge.onAuth('false', '');
+                    }
+                } catch (e) { AndroidBridge.onAuth('false', ''); }
+            };
+            window.signIn = function () {
+                try {
+                    puter.auth.signIn().then(function () {
+                        window.checkAuth();
+                        window.fetchModels();
+                    }).catch(function (e) {});
+                } catch (e) {}
+            };
+            (function boot() {
+                if (typeof puter === 'undefined') { setTimeout(boot, 300); return; }
+                AndroidBridge.onReady();
+                window.fetchModels();
+                window.checkAuth();
+            })();
+            </script></body></html>
+        """.trimIndent()
+    }
+}
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/providers/ModelCache.kt
+========================================
+package com.hiyako.app.providers
+
+import android.content.Context
+import com.hiyako.app.security.KeyVault
+import org.json.JSONArray
+
+/** Model ids loaded from each account's /models endpoint, cached on the device. */
+object ModelCache {
+    private fun key(accountId: String) = "models_$accountId"
+
+    fun models(context: Context, accountId: String): List<String> {
+        val raw = KeyVault.prefs(context).getString(key(accountId), null) ?: return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).map { array.getString(it) }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun save(context: Context, accountId: String, ids: List<String>) {
+        KeyVault.prefs(context).edit().putString(key(accountId), JSONArray(ids).toString()).apply()
+    }
+
+    fun remove(context: Context, accountId: String) {
+        KeyVault.prefs(context).edit().remove(key(accountId)).apply()
+    }
+}
+
+/** The model a request uses when the account has no explicit default. */
+fun defaultModelOf(context: Context, account: Account): String =
+    account.model.ifBlank { ModelCache.models(context, account.id).firstOrNull().orEmpty() }
+
+/** Stores the account's default model. */
+fun setAccountModel(context: Context, accountId: String, model: String) {
+    val updated = AccountStore.load(context).map { if (it.id == accountId) it.copy(model = model) else it }
+    AccountStore.save(context, updated)
+}
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/providers/OpenAiCompatClient.kt
+========================================
+package com.hiyako.app.providers
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
+
+/**
+ * Streams chat completions from any OpenAI-compatible endpoint (SSE "data:" lines).
+ * Returns Result so callers can show the error and offer another account on quota errors.
+ */
+object OpenAiCompatClient {
+    private val http: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .build()
+
+    private val jsonType = "application/json".toMediaType()
+
+    /** Builds the messages array from (role, text) pairs, e.g. ("user", "hi"). */
+    fun messagesOf(turns: List<Pair<String, String>>): JSONArray {
+        val array = JSONArray()
+        for ((role, text) in turns) {
+            array.put(JSONObject().put("role", role).put("content", text))
+        }
+        return array
+    }
+
+    /** True when the error looks like a quota, credit or rate-limit failure. */
+    fun isQuotaError(error: Throwable): Boolean {
+        val message = error.message.orEmpty()
+        return message.contains("HTTP 429") ||
+            message.contains("HTTP 402") ||
+            message.contains("credit", ignoreCase = true) ||
+            message.contains("quota", ignoreCase = true)
+    }
+
+    /** Loads the model ids from the provider's /models endpoint. */
+    suspend fun listModels(baseUrl: String, apiKey: String): Result<List<String>> = withContext(Dispatchers.IO) {
+        try {
+            val builder = Request.Builder()
+                .url(baseUrl.trimEnd('/') + "/models")
+                .get()
+                .header("Accept", "application/json")
+            if (apiKey.isNotEmpty()) builder.header("Authorization", "Bearer $apiKey")
+            http.newCall(builder.build()).execute().use { response ->
+                if (!response.isSuccessful) error("HTTP ${response.code}")
+                val body = response.body?.string().orEmpty()
+                val data = JSONObject(body).optJSONArray("data") ?: JSONArray()
+                val ids = (0 until data.length()).mapNotNull { index ->
+                    data.optJSONObject(index)?.optString("id")?.takeIf { it.isNotBlank() }
+                }
+                Result.success(ids.distinct().sorted())
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun stream(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        messages: JSONArray,
+        onDelta: (String) -> Unit
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val payload = JSONObject()
+                .put("model", model)
+                .put("messages", messages)
+                .put("stream", true)
+            val builder = Request.Builder()
+                .url(baseUrl.trimEnd('/') + "/chat/completions")
+                .post(payload.toString().toRequestBody(jsonType))
+                .header("Accept", "text/event-stream")
+            if (apiKey.isNotEmpty()) builder.header("Authorization", "Bearer $apiKey")
+
+            http.newCall(builder.build()).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val detail = response.body?.string()?.take(300).orEmpty()
+                    error("HTTP ${response.code} $detail")
+                }
+                val source = response.body?.source() ?: error("Empty response body")
+                while (true) {
+                    val line = source.readUtf8Line() ?: break
+                    if (!line.startsWith("data:")) continue
+                    val data = line.removePrefix("data:").trim()
+                    if (data == "[DONE]") break
+                    val delta = JSONObject(data)
+                        .optJSONArray("choices")
+                        ?.optJSONObject(0)
+                        ?.optJSONObject("delta")
+                        ?.optString("content", "")
+                    if (!delta.isNullOrEmpty()) onDelta(delta)
+                }
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+}
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/providers/ProviderCatalog.kt
+========================================
+package com.hiyako.app.providers
+
+import android.content.Context
+import com.hiyako.app.security.KeyVault
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
+
+/**
+ * A provider the app knows how to talk to.
+ * editableBaseUrl = true means the user must type or confirm the endpoint.
+ * Endpoints marked "not verified" in note must be checked against the provider docs before release.
+ */
+data class ProviderSpec(
+    val id: String,
+    val name: String,
+    val baseUrl: String,
+    val defaultModel: String,
+    val needsKey: Boolean = true,
+    val editableBaseUrl: Boolean = false,
+    val note: String = ""
+)
+
+object ProviderCatalog {
+    const val PUTER = "puter"
+    const val CUSTOM = "custom"
+
+    val all: List<ProviderSpec> = listOf(
+        ProviderSpec(
+            id = PUTER,
+            name = "Puter.js",
+            baseUrl = "",
+            defaultModel = "",
+            needsKey = false,
+            note = "Sign in with Puter. No API key needed; usage follows your Puter account credits."
+        ),
+        ProviderSpec(
+            id = "freeaiapikey",
+            name = "FreeAIapikey",
+            baseUrl = "",
+            defaultModel = "",
+            editableBaseUrl = true,
+            note = "Endpoint not verified yet. Enter the base URL from the provider's docs."
+        ),
+        ProviderSpec(
+            id = "agentrouter",
+            name = "AgentRouter",
+            baseUrl = "",
+            defaultModel = "",
+            editableBaseUrl = true,
+            note = "Endpoint not verified yet. Enter the base URL from the provider's docs."
+        ),
+        ProviderSpec(
+            id = "github",
+            name = "GitHub Models",
+            baseUrl = "https://models.github.ai/inference",
+            defaultModel = "openai/gpt-4.1-mini",
+            note = "Use a GitHub token with Models access."
+        ),
+        ProviderSpec(
+            id = "groq",
+            name = "Groq",
+            baseUrl = "https://api.groq.com/openai/v1",
+            defaultModel = "llama-3.3-70b-versatile",
+            note = "Fast inference with a free tier."
+        ),
+        ProviderSpec(
+            id = "gemini",
+            name = "Google AI Studio (Gemini)",
+            baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai",
+            defaultModel = "gemini-2.5-flash",
+            note = "Gemini through its OpenAI-compatible endpoint."
+        ),
+        ProviderSpec(
+            id = "nvidia",
+            name = "NVIDIA NIM",
+            baseUrl = "https://integrate.api.nvidia.com/v1",
+            defaultModel = "meta/llama-3.3-70b-instruct",
+            note = "Hosted open models from NVIDIA."
+        ),
+        ProviderSpec(
+            id = "openrouter",
+            name = "OpenRouter",
+            baseUrl = "https://openrouter.ai/api/v1",
+            defaultModel = "openrouter/auto",
+            note = "One key for hundreds of models, including free ones."
+        ),
+        ProviderSpec(
+            id = "cloudflare",
+            name = "Cloudflare Workers AI",
+            baseUrl = "",
+            defaultModel = "@cf/meta/llama-3.1-8b-instruct",
+            editableBaseUrl = true,
+            note = "Base URL is https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
+        ),
+        ProviderSpec(
+            id = "requesty",
+            name = "Requesty",
+            baseUrl = "https://router.requesty.ai/v1",
+            defaultModel = "openai/gpt-4o-mini",
+            note = "Router that exposes many models behind one key."
+        ),
+        ProviderSpec(
+            id = "mistral",
+            name = "Mistral AI",
+            baseUrl = "https://api.mistral.ai/v1",
+            defaultModel = "mistral-small-latest"
+        ),
+        ProviderSpec(
+            id = "cerebras",
+            name = "Cerebras",
+            baseUrl = "https://api.cerebras.ai/v1",
+            defaultModel = "llama3.1-8b",
+            note = "Very fast inference."
+        ),
+        ProviderSpec(
+            id = "huggingface",
+            name = "Hugging Face",
+            baseUrl = "https://router.huggingface.co/v1",
+            defaultModel = "meta-llama/Llama-3.1-8B-Instruct"
+        ),
+        ProviderSpec(
+            id = "anakin",
+            name = "Anakin.ai",
+            baseUrl = "",
+            defaultModel = "",
+            editableBaseUrl = true,
+            note = "Endpoint not verified yet. Enter the base URL from the provider's docs."
+        ),
+        ProviderSpec(
+            id = CUSTOM,
+            name = "Custom (any OpenAI-compatible API)",
+            baseUrl = "",
+            defaultModel = "",
+            editableBaseUrl = true,
+            note = "Any service with a /chat/completions endpoint. Base URL must start with https://"
+        )
+    )
+
+    fun find(id: String): ProviderSpec? = all.firstOrNull { it.id == id }
+}
+
+/** A saved account. The API key is stored only as an encrypted blob in keyEnc. */
+data class Account(
+    val id: String,
+    val providerId: String,
+    val label: String,
+    val baseUrl: String,
+    val model: String,
+    val keyEnc: String
+)
+
+object AccountStore {
+    private const val PREFS_KEY = "accounts_v1"
+
+    fun load(context: Context): List<Account> {
+        val raw = KeyVault.prefs(context).getString(PREFS_KEY, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            val result = ArrayList<Account>(array.length())
+            for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                result.add(
+                    Account(
+                        id = o.getString("id"),
+                        providerId = o.getString("providerId"),
+                        label = o.optString("label"),
+                        baseUrl = o.optString("baseUrl"),
+                        model = o.optString("model"),
+                        keyEnc = o.optString("keyEnc")
+                    )
+                )
+            }
+            result
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun save(context: Context, accounts: List<Account>) {
+        val array = JSONArray()
+        for (a in accounts) {
+            array.put(
+                JSONObject()
+                    .put("id", a.id)
+                    .put("providerId", a.providerId)
+                    .put("label", a.label)
+                    .put("baseUrl", a.baseUrl)
+                    .put("model", a.model)
+                    .put("keyEnc", a.keyEnc)
+            )
+        }
+        KeyVault.prefs(context).edit().putString(PREFS_KEY, array.toString()).apply()
+    }
+
+    fun add(
+        context: Context,
+        providerId: String,
+        label: String,
+        baseUrl: String,
+        model: String,
+        apiKey: String
+    ): Account {
+        val account = Account(
+            id = UUID.randomUUID().toString(),
+            providerId = providerId,
+            label = label,
+            baseUrl = baseUrl.trim(),
+            model = model.trim(),
+            keyEnc = if (apiKey.isEmpty()) "" else KeyVault.encrypt(apiKey)
+        )
+        save(context, load(context) + account)
+        return account
+    }
+
+    fun remove(context: Context, accountId: String) {
+        save(context, load(context).filterNot { it.id == accountId })
+        ModelCache.remove(context, accountId)
+    }
+
+    /** Returns the decrypted key, or an empty string when the account has none. Never log the result. */
+    fun apiKey(account: Account): String {
+        if (account.keyEnc.isEmpty()) return ""
+        return KeyVault.decrypt(account.keyEnc).orEmpty()
+    }
+}
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/security/KeyVault.kt
+========================================
+package com.hiyako.app.security
+
+import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+
+/**
+ * Encrypts secrets (API keys) with an AES-256-GCM key that lives in the Android Keystore.
+ * The plaintext key never touches disk and is never logged.
+ * Stored format: base64(iv) + ":" + base64(ciphertext).
+ */
+object KeyVault {
+    private const val KEY_ALIAS = "hiyako_key_vault_v1"
+    private const val PREFS_NAME = "hiyako_secure_prefs"
+    private const val TRANSFORMATION = "AES/GCM/NoPadding"
+    private const val GCM_TAG_BITS = 128
+
+    fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private fun secretKey(): SecretKey {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        val existing = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
+        if (existing != null) return existing.secretKey
+
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        val spec = KeyGenParameterSpec.Builder(
+            KEY_ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+        )
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .build()
+        generator.init(spec)
+        return generator.generateKey()
+    }
+
+    fun encrypt(plain: String): String {
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+        val cipherText = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
+        val iv = Base64.encodeToString(cipher.iv, Base64.NO_WRAP)
+        val data = Base64.encodeToString(cipherText, Base64.NO_WRAP)
+        return "$iv:$data"
+    }
+
+    /** Returns null when the blob cannot be decrypted (for example after the keystore was reset). */
+    fun decrypt(blob: String): String? {
+        return try {
+            val parts = blob.split(":", limit = 2)
+            if (parts.size != 2) return null
+            val iv = Base64.decode(parts[0], Base64.NO_WRAP)
+            val data = Base64.decode(parts[1], Base64.NO_WRAP)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
+            String(cipher.doFinal(data), Charsets.UTF_8)
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/ui/components/ChatComponents.kt
+========================================
+package com.hiyako.app.ui.components
+
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.VolumeUp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.hiyako.app.ui.i18n.tr
+import com.hiyako.app.ui.theme.AccentBlue
+import com.hiyako.app.ui.theme.BorderColor
+import com.hiyako.app.ui.theme.ElevatedSurface
+import com.hiyako.app.ui.theme.OledBlack
+import com.hiyako.app.ui.theme.SecondarySurface
+import com.hiyako.app.ui.theme.TextMuted
+import com.hiyako.app.ui.theme.TextPrimary
+import com.hiyako.app.ui.theme.TextSecondary
+import com.hiyako.app.ui.theme.UserBubble
+import androidx.compose.ui.layout.ContentScale
+
+// ------------------------------------------------------------------ Clipboard and share
+
+fun chatCopyText(context: Context, text: String) {
+    try {
+        val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        manager.setPrimaryClip(ClipData.newPlainText("Hiyako", text))
+        Toast.makeText(context, tr("Copied", "تم النسخ"), Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        Toast.makeText(context, tr("Could not copy", "تعذّر النسخ"), Toast.LENGTH_SHORT).show()
+    }
+}
+
+fun chatShareText(context: Context, text: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    val chooser = Intent.createChooser(intent, tr("Share", "مشاركة"))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(chooser)
+    } catch (e: Exception) {
+        Toast.makeText(context, tr("Nothing to share with", "لا يوجد تطبيق للمشاركة"), Toast.LENGTH_SHORT).show()
+    }
+}
+
+// ------------------------------------------------------------------ Messages
+
+@Composable
+fun UserMessage(text: String, type: String, attachmentUri: String?, attachmentName: String?) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.End
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = 22.dp, bottomEnd = 6.dp))
+                .background(UserBubble)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            if (attachmentUri != null && type == "IMAGE") {
+                AsyncImage(
+                    model = attachmentUri,
+                    contentDescription = tr("Image", "صورة"),
+                    modifier = Modifier.size(180.dp).clip(RoundedCornerShape(14.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                if (text.isNotBlank()) Spacer(Modifier.height(8.dp))
+            }
+            if (type == "FILE") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        attachmentName ?: tr("File", "ملف"),
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (text.isNotBlank()) Spacer(Modifier.height(8.dp))
+            }
+            if (text.isNotBlank()) {
+                SelectionContainer {
+                    Text(text, color = TextPrimary, fontSize = 15.sp, lineHeight = 23.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AssistantMessage(
+    text: String,
+    showActions: Boolean = true,
+    showRegenerate: Boolean = false,
+    onRegenerate: () -> Unit = {},
+    onSpeak: () -> Unit = {},
+    onReport: (() -> Unit)? = null
+) {
+    val context = LocalContext.current
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier.size(28.dp).background(AccentBlue.copy(alpha = 0.18f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("✦", color = AccentBlue, fontSize = 13.sp)
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            SelectionContainer { MarkdownText(text) }
+            if (showActions) {
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ActionIcon(Icons.Outlined.ContentCopy, tr("Copy", "نسخ")) { chatCopyText(context, text) }
+                    ActionIcon(Icons.Outlined.VolumeUp, tr("Read aloud", "قراءة بصوت")) { onSpeak() }
+                    ActionIcon(Icons.Filled.Share, tr("Share", "مشاركة")) { chatShareText(context, text) }
+                    if (showRegenerate) {
+                        ActionIcon(Icons.Outlined.Refresh, tr("Regenerate", "إعادة التوليد")) { onRegenerate() }
+                    }
+                    if (onReport != null) {
+                        ActionIcon(Icons.Outlined.Flag, tr("Report", "إبلاغ")) { onReport() }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionIcon(icon: ImageVector, label: String, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(34.dp)) {
+        Icon(icon, contentDescription = label, tint = TextMuted, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+fun TypingDots() {
+    val transition = rememberInfiniteTransition(label = "typing")
+    Row(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(3) { index ->
+            val alpha by transition.animateFloat(
+                initialValue = 0.2f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 600, delayMillis = index * 180),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "dot$index"
+            )
+            Box(Modifier.size(7.dp).background(TextSecondary.copy(alpha = alpha), CircleShape))
+            if (index < 2) Spacer(Modifier.width(6.dp))
+        }
+    }
+}
+
+@Composable
+fun ErrorCard(message: String, onRetry: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .background(Color(0x1AEF4444), RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Warning, null, tint = Color(0xFFF87171), modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                tr("Something went wrong", "حدث خطأ"),
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(message, color = TextSecondary, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        }
+        TextButton(onClick = onRetry) {
+            Text(tr("Retry", "إعادة"), color = AccentBlue)
+        }
+    }
+}
+
+// ------------------------------------------------------------------ Markdown
+
+private sealed class MdBlock {
+    class Para(val text: String) : MdBlock()
+    class Head(val level: Int, val text: String) : MdBlock()
+    class Bullets(val items: List<String>) : MdBlock()
+    class Numbers(val items: List<String>) : MdBlock()
+    class Code(val lang: String, val code: String) : MdBlock()
+    class Quote(val text: String) : MdBlock()
+}
+
+private val numberedRegex = Regex("^\\d+[.)]\\s+")
+private val headingRegex = Regex("^(#{1,6})\\s+(.*)$")
+
+private fun parseMarkdownBlocks(src: String): List<MdBlock> {
+    val out = ArrayList<MdBlock>()
+    val para = ArrayList<String>()
+    val bullets = ArrayList<String>()
+    val numbers = ArrayList<String>()
+    val quote = ArrayList<String>()
+
+    fun flush() {
+        if (para.isNotEmpty()) {
+            out.add(MdBlock.Para(para.joinToString("\n")))
+            para.clear()
+        }
+        if (bullets.isNotEmpty()) {
+            out.add(MdBlock.Bullets(bullets.toList()))
+            bullets.clear()
+        }
+        if (numbers.isNotEmpty()) {
+            out.add(MdBlock.Numbers(numbers.toList()))
+            numbers.clear()
+        }
+        if (quote.isNotEmpty()) {
+            out.add(MdBlock.Quote(quote.joinToString("\n")))
+            quote.clear()
+        }
+    }
+
+    val lines = src.lines()
+    var i = 0
+    while (i < lines.size) {
+        val trimmed = lines[i].trim()
+        val heading = headingRegex.find(trimmed)
+        when {
+            trimmed.startsWith("```") -> {
+                flush()
+                val lang = trimmed.removePrefix("```").trim()
+                val code = ArrayList<String>()
+                i++
+                while (i < lines.size && !lines[i].trim().startsWith("```")) {
+                    code.add(lines[i])
+                    i++
+                }
+                out.add(MdBlock.Code(lang, code.joinToString("\n")))
+            }
+            trimmed.isEmpty() -> flush()
+            heading != null -> {
+                flush()
+                out.add(MdBlock.Head(heading.groupValues[1].length, heading.groupValues[2].trim()))
+            }
+            trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ") -> {
+                if (bullets.isEmpty()) flush()
+                bullets.add(trimmed.substring(2).trim())
+            }
+            numberedRegex.containsMatchIn(trimmed) -> {
+                if (numbers.isEmpty()) flush()
+                numbers.add(trimmed.replace(numberedRegex, "").trim())
+            }
+            trimmed.startsWith("> ") -> {
+                if (quote.isEmpty()) flush()
+                quote.add(trimmed.substring(2).trim())
+            }
+            else -> {
+                if (para.isEmpty()) flush()
+                para.add(lines[i])
+            }
+        }
+        i++
+    }
+    flush()
+    return out
+}
+
+private fun inlineStyled(text: String): AnnotatedString = buildAnnotatedString {
+    var i = 0
+    while (i < text.length) {
+        if (text.startsWith("**", i)) {
+            val end = text.indexOf("**", i + 2)
+            if (end > i + 2) {
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                    append(text.substring(i + 2, end))
+                }
+                i = end + 2
+            } else {
+                append("**")
+                i += 2
+            }
+        } else if (text[i] == '`') {
+            val end = text.indexOf('`', i + 1)
+            if (end > i + 1) {
+                withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = AccentBlue)) {
+                    append(text.substring(i + 1, end))
+                }
+                i = end + 1
+            } else {
+                append('`')
+                i++
+            }
+        } else {
+            append(text[i])
+            i++
+        }
+    }
+}
+
+@Composable
+fun MarkdownText(text: String) {
+    val blocks = remember(text) { parseMarkdownBlocks(text) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        blocks.forEach { block ->
+            when (block) {
+                is MdBlock.Para -> Text(
+                    inlineStyled(block.text),
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    lineHeight = 24.sp
+                )
+                is MdBlock.Head -> Text(
+                    inlineStyled(block.text),
+                    color = TextPrimary,
+                    fontSize = (22 - block.level * 2).sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 28.sp
+                )
+                is MdBlock.Bullets -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    block.items.forEach { item ->
+                        Row {
+                            Text("•  ", color = AccentBlue, fontSize = 15.sp, lineHeight = 24.sp)
+                            Text(
+                                inlineStyled(item),
+                                color = TextPrimary,
+                                fontSize = 15.sp,
+                                lineHeight = 24.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+                is MdBlock.Numbers -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    block.items.forEachIndexed { index, item ->
+                        Row {
+                            Text("${index + 1}.  ", color = AccentBlue, fontSize = 15.sp, lineHeight = 24.sp)
+                            Text(
+                                inlineStyled(item),
+                                color = TextPrimary,
+                                fontSize = 15.sp,
+                                lineHeight = 24.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+                is MdBlock.Quote -> Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    Box(
+                        Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(AccentBlue, RoundedCornerShape(2.dp))
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        inlineStyled(block.text),
+                        color = TextSecondary,
+                        fontSize = 15.sp,
+                        lineHeight = 24.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                is MdBlock.Code -> CollapsibleCodeBlock(block.lang, block.code)
+            }
+        }
+    }
+}
+
+@Composable
+fun CollapsibleCodeBlock(language: String, code: String) {
+    val context = LocalContext.current
+    val lineCount = code.lines().size
+    val collapsible = lineCount > 12
+    var expanded by remember(code) { mutableStateOf(!collapsible) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF0D0D10))
+            .border(1.dp, Color(0xFF26262C), RoundedCornerShape(14.dp))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().background(Color(0xFF17171C)).padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                language.ifBlank { "code" },
+                color = Color(0xFF9CA3AF),
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f)
+            )
+            if (collapsible) {
+                IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = tr("Expand or collapse", "فتح أو طي"),
+                        tint = Color(0xFF9CA3AF)
+                    )
+                }
+            }
+            IconButton(onClick = { chatCopyText(context, code) }, modifier = Modifier.size(30.dp)) {
+                Icon(
+                    Icons.Outlined.ContentCopy,
+                    contentDescription = tr("Copy code", "نسخ الكود"),
+                    tint = Color(0xFF9CA3AF),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+        if (expanded) {
+            SelectionContainer {
+                Box(Modifier.horizontalScroll(rememberScrollState()).padding(12.dp)) {
+                    Text(
+                        code,
+                        color = Color(0xFFE5E7EB),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------------ Composer and chips
+
+@Composable
+fun ComposerBar(
+    input: String,
+    onInputChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+    isGenerating: Boolean,
+    canSend: Boolean,
+    onAttachClick: () -> Unit,
+    isThinking: Boolean,
+    onThinkClick: () -> Unit,
+    isSearch: Boolean,
+    onSearchClick: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ToggleChip(tr("Think", "تفكير"), isThinking, onThinkClick)
+            ToggleChip(tr("Search", "بحث"), isSearch, onSearchClick)
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(ElevatedSurface)
+                .padding(start = 4.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            IconButton(onClick = onAttachClick, modifier = Modifier.size(44.dp)) {
+                Icon(Icons.Default.Add, contentDescription = tr("Attach", "إرفاق"), tint = TextSecondary)
+            }
+            BasicTextField(
+                value = input,
+                onValueChange = onInputChange,
+                textStyle = TextStyle(color = TextPrimary, fontSize = 16.sp, lineHeight = 22.sp),
+                cursorBrush = SolidColor(AccentBlue),
+                maxLines = 6,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                modifier = Modifier.weight(1f).padding(vertical = 11.dp, horizontal = 4.dp),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (input.isEmpty()) {
+                            Text(tr("Message", "اكتب رسالتك"), color = TextMuted, fontSize = 16.sp)
+                        }
+                        inner()
+                    }
+                }
+            )
+            Spacer(Modifier.width(4.dp))
+            val active = isGenerating || canSend
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (active) AccentBlue else BorderColor)
+                    .clickable(enabled = active) {
+                        if (isGenerating) onStop() else onSend()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (isGenerating) Icons.Default.Stop else Icons.Default.Send,
+                    contentDescription = if (isGenerating) tr("Stop", "إيقاف") else tr("Send", "إرسال"),
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToggleChip(label: String, active: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (active) AccentBlue.copy(alpha = 0.18f) else ElevatedSurface)
+            .border(1.dp, if (active) AccentBlue else BorderColor, RoundedCornerShape(50))
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Text(
+            label,
+            color = if (active) AccentBlue else TextSecondary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+fun SuggestionCard(title: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(SecondarySurface)
+            .border(1.dp, BorderColor, RoundedCornerShape(20.dp))
+            .clickable { onClick() }
+            .padding(14.dp)
+    ) {
+        Text(title, color = TextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
+    }
+}
+
+/** Used by the chat screen for the background colour behind the composer. */
+val ComposerBackground: Color get() = OledBlack
+
+
+========================================
+FILE: ./app/src/main/java/com/hiyako/app/ui/i18n/Lang.kt
+========================================
+package com.hiyako.app.ui.i18n
+
+import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+
+/** The app language. Arabic is the default; English is available in Settings. */
+object Lang {
+    private const val PREFS = "nexus_settings"
+    private const val KEY = "app_lang"
+
+    var arabic: Boolean by mutableStateOf(true)
+
+    fun load(context: Context) {
+        arabic = try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "ar") != "en"
+        } catch (e: Exception) {
+            true
+        }
+    }
+
+    fun set(context: Context, useArabic: Boolean) {
+        arabic = useArabic
+        try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY, if (useArabic) "ar" else "en")
+                .apply()
+        } catch (e: Exception) {
+            // Preferences unavailable: the language still changes for this session.
+        }
+    }
+}
+
+/** Returns the English or Arabic text for the current language. Reading it inside composables keeps them in sync. */
+fun tr(en: String, ar: String): String = if (Lang.arabic) ar else en
+
+

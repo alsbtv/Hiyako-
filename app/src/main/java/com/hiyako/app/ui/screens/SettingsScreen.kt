@@ -7,16 +7,7 @@ import android.webkit.WebStorage
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -24,55 +15,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hiyako.app.data.db.AppDatabase
-import com.hiyako.app.providers.Account
-import com.hiyako.app.providers.AccountStore
-import com.hiyako.app.providers.ModelCache
-import com.hiyako.app.providers.OpenAiCompatClient
-import com.hiyako.app.providers.ProviderCatalog
-import com.hiyako.app.providers.ProviderSpec
-import com.hiyako.app.providers.defaultModelOf
-import com.hiyako.app.providers.setAccountModel
+import com.hiyako.app.providers.*
 import com.hiyako.app.security.KeyVault
 import com.hiyako.app.ui.i18n.Lang
 import com.hiyako.app.ui.i18n.tr
-import com.hiyako.app.ui.theme.AppPalette
-import com.hiyako.app.ui.theme.AppPalettes
-import com.hiyako.app.ui.theme.ThemeState
+import com.hiyako.app.ui.theme.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -95,6 +56,9 @@ fun SettingsScreen(
     var confirmWipe by remember { mutableStateOf(false) }
     var wiped by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    
+    var showAllProviders by remember { mutableStateOf(false) }
+    val auth by vm.auth.collectAsState()
 
     fun fetchModels(account: Account) {
         scope.launch {
@@ -115,14 +79,16 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        containerColor = OledBlack,
         topBar = {
             TopAppBar(
-                title = { Text(tr("Settings", "الإعدادات"), fontWeight = FontWeight.SemiBold) },
+                title = { Text(tr("Settings", "الإعدادات"), fontWeight = FontWeight.Bold, color = TextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "رجوع"))
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "رجوع"), tint = TextPrimary)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
             )
         }
     ) { innerPadding ->
@@ -132,13 +98,9 @@ fun SettingsScreen(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ---------------------------------------------------------- Appearance and language
-            SectionCard(
-                title = tr("Appearance", "المظهر"),
-                subtitle = tr("Pick a theme. It applies to the whole app.", "اختر ثيماً. يُطبَّق على التطبيق كله.")
-            ) {
+            SectionCard(title = tr("Appearance", "المظهر"), subtitle = tr("Pick a theme. It applies to the whole app.", "اختر ثيماً. يُطبَّق على التطبيق كله.")) {
                 AppPalettes.all.chunked(3).forEach { rowItems ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         rowItems.forEach { palette ->
@@ -153,7 +115,7 @@ fun SettingsScreen(
                     Spacer(Modifier.height(8.dp))
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(tr("Language", "اللغة"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(tr("Language", "اللغة"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LangOption("العربية", selected = Lang.arabic, onClick = { Lang.set(context, true) }, modifier = Modifier.weight(1f))
@@ -161,36 +123,48 @@ fun SettingsScreen(
                 }
             }
 
-            // ---------------------------------------------------------- Providers
             SectionCard(
                 title = tr("Providers and accounts", "المزودون والحسابات"),
                 subtitle = tr(
-                    "Add as many accounts as you like. Keys are encrypted with the Android Keystore. Every model of every account appears in the model picker.",
-                    "أضف أي عدد من الحسابات. تُشفَّر المفاتيح بمخزن أندرويد. تظهر كل نماذج كل الحسابات في منتقي النماذج."
+                    "Add as many accounts as you like. Keys are encrypted with the Android Keystore.",
+                    "أضف أي عدد من الحسابات. تُشفَّر المفاتيح بمخزن أندرويد."
                 )
             ) {
                 status?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = AccentBlue)
                     Spacer(Modifier.height(6.dp))
                 }
-                ProviderCatalog.all.forEach { spec ->
+                
+                val displayedProviders = if (showAllProviders) ProviderCatalog.all else ProviderCatalog.all.take(4)
+                
+                displayedProviders.forEach { spec ->
                     val mine = accounts.filter { it.providerId == spec.id }
                     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(spec.name, fontWeight = FontWeight.SemiBold)
+                                Text(spec.name, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                                 if (spec.note.isNotEmpty()) {
-                                    Text(spec.note, style = MaterialTheme.typography.bodySmall)
+                                    Text(spec.note, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                                 }
                             }
                             if (spec.id == ProviderCatalog.PUTER) {
                                 OutlinedButton(onClick = {
-                                    clearPuterSession()
-                                    onSignIn()
-                                }) { Text(tr("Switch account", "تبديل الحساب")) }
+                                    if (auth.signedIn) {
+                                        clearPuterSession()
+                                        vm.engine.reload()
+                                        scope.launch {
+                                            delay(1000)
+                                            onSignIn()
+                                        }
+                                    } else {
+                                        onSignIn()
+                                    }
+                                }) { 
+                                    Text(if (auth.signedIn) tr("Switch account", "تبديل الحساب") else tr("Sign In", "تسجيل الدخول"), color = AccentBlue) 
+                                }
                             } else {
                                 IconButton(onClick = { addingFor = spec }) {
-                                    Icon(Icons.Default.Add, contentDescription = tr("Add account", "إضافة حساب"))
+                                    Icon(Icons.Default.Add, contentDescription = tr("Add account", "إضافة حساب"), tint = AccentBlue)
                                 }
                             }
                         }
@@ -198,74 +172,74 @@ fun SettingsScreen(
                             val modelCount = ModelCache.models(context, account.id).size
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f).clickable { pickingFor = account }) {
-                                    Text(account.label)
+                                    Text(account.label, color = TextPrimary)
                                     Text(
                                         defaultModelOf(context, account).ifBlank { tr("No model yet", "لا يوجد نموذج بعد") } +
                                             tr(" · $modelCount models", " · $modelCount نموذجاً"),
                                         style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 IconButton(onClick = { fetchModels(account) }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = tr("Load models", "تحميل النماذج"))
+                                    Icon(Icons.Default.Refresh, contentDescription = tr("Load models", "تحميل النماذج"), tint = TextSecondary)
                                 }
                                 IconButton(onClick = {
                                     AccountStore.remove(context, account.id)
                                     accounts = AccountStore.load(context)
                                     vm.reloadAccountModels()
                                 }) {
-                                    Icon(Icons.Default.Delete, contentDescription = tr("Remove account", "حذف الحساب"))
+                                    Icon(Icons.Default.Delete, contentDescription = tr("Remove account", "حذف الحساب"), tint = Color.Red)
                                 }
                             }
                         }
                     }
                 }
+                
+                if (ProviderCatalog.all.size > 4) {
+                    TextButton(
+                        onClick = { showAllProviders = !showAllProviders },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(if (showAllProviders) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = AccentBlue)
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            if (showAllProviders) tr("Show less", "عرض أقل") else tr("Show all providers", "عرض كل المزودين"),
+                            color = AccentBlue
+                        )
+                    }
+                }
             }
 
-            // ---------------------------------------------------------- Tools
             SectionCard(title = tr("Tools", "الأدوات")) {
                 OutlinedButton(onClick = onNavigateToWorkspace, modifier = Modifier.fillMaxWidth()) {
-                    Text(tr("Workspace (GitHub)", "مساحة العمل (GitHub)"))
+                    Text(tr("Workspace (GitHub)", "مساحة العمل (GitHub)"), color = TextPrimary)
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onNavigateToMemory, modifier = Modifier.fillMaxWidth()) {
-                    Text(tr("Memory", "الذاكرة"))
+                    Text(tr("Memory", "الذاكرة"), color = TextPrimary)
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onNavigateToUpdater, modifier = Modifier.fillMaxWidth()) {
-                    Text(tr("Check for updates", "التحقق من التحديثات"))
+                    Text(tr("Check for updates", "التحقق من التحديثات"), color = TextPrimary)
                 }
             }
 
-            // ---------------------------------------------------------- Privacy and data
             SectionCard(
                 title = tr("Privacy and data", "الخصوصية والبيانات"),
-                subtitle = tr(
-                    "Everything is stored on this device. Deleting data cannot be undone.",
-                    "كل شيء مخزّن على هذا الجهاز. حذف البيانات لا يمكن التراجع عنه."
-                )
+                subtitle = tr("Everything is stored on this device. Deleting data cannot be undone.", "كل شيء مخزّن على هذا الجهاز. حذف البيانات لا يمكن التراجع عنه.")
             ) {
                 OutlinedButton(onClick = { confirmClear = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(tr("Clear all chats", "حذف كل المحادثات"))
+                    Text(tr("Clear all chats", "حذف كل المحادثات"), color = TextPrimary)
                 }
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = { confirmWipe = true },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.2f))
                 ) {
-                    Text(tr("Delete all data on this device", "حذف كل البيانات على هذا الجهاز"))
-                }
-                if (wiped) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        tr(
-                            "All local data was deleted. Close and reopen the app to finish.",
-                            "تم حذف كل البيانات المحلية. أغلق التطبيق وافتحه من جديد لإكمال الحذف."
-                        ),
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text(tr("Delete all data on this device", "حذف كل البيانات على هذا الجهاز"), color = Color.Red)
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -284,7 +258,6 @@ fun SettingsScreen(
             }
         )
     }
-
     pickingFor?.let { account ->
         DefaultModelDialog(
             account = account,
@@ -298,36 +271,20 @@ fun SettingsScreen(
             onDismiss = { pickingFor = null }
         )
     }
-
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text(tr("Clear all chats?", "حذف كل المحادثات؟")) },
-            text = {
-                Text(tr("This deletes every conversation on this device. It cannot be undone.", "سيتم حذف كل المحادثات على هذا الجهاز. لا يمكن التراجع."))
-            },
-            confirmButton = {
-                Button(onClick = {
-                    onClearChat()
-                    confirmClear = false
-                }) { Text(tr("Delete", "حذف")) }
-            },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(tr("Cancel", "إلغاء")) } }
+            title = { Text(tr("Clear all chats?", "حذف كل المحادثات؟"), color = TextPrimary) },
+            text = { Text(tr("This deletes every conversation on this device. It cannot be undone.", "سيتم حذف كل المحادثات على هذا الجهاز. لا يمكن التراجع."), color = TextSecondary) },
+            confirmButton = { Button(onClick = { onClearChat(); confirmClear = false }) { Text(tr("Delete", "حذف")) } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
         )
     }
-
     if (confirmWipe) {
         AlertDialog(
             onDismissRequest = { confirmWipe = false },
-            title = { Text(tr("Delete all data?", "حذف كل البيانات؟")) },
-            text = {
-                Text(
-                    tr(
-                        "This deletes all chats, memories, saved accounts and keys on this device. It cannot be undone.",
-                        "سيتم حذف كل المحادثات والذاكرة والحسابات والمفاتيح على هذا الجهاز. لا يمكن التراجع."
-                    )
-                )
-            },
+            title = { Text(tr("Delete all data?", "حذف كل البيانات؟"), color = TextPrimary) },
+            text = { Text(tr("This deletes all chats, memories, saved accounts and keys on this device.", "سيتم حذف كل المحادثات والذاكرة والحسابات والمفاتيح على هذا الجهاز."), color = TextSecondary) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -337,10 +294,10 @@ fun SettingsScreen(
                         wiped = true
                         confirmWipe = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
                 ) { Text(tr("Delete everything", "حذف كل شيء")) }
             },
-            dismissButton = { TextButton(onClick = { confirmWipe = false }) { Text(tr("Cancel", "إلغاء")) } }
+            dismissButton = { TextButton(onClick = { confirmWipe = false }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
         )
     }
 }
@@ -350,13 +307,13 @@ private fun SectionCard(title: String, subtitle: String? = null, content: @Compo
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(containerColor = DeepSurface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = TextPrimary)
             if (subtitle != null) {
                 Spacer(Modifier.height(2.dp))
-                Text(subtitle, style = MaterialTheme.typography.bodySmall)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
             Spacer(Modifier.height(12.dp))
             content()
@@ -369,19 +326,13 @@ private fun LangOption(label: String, selected: Boolean, onClick: () -> Unit, mo
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.background
-            )
-            .border(
-                1.dp,
-                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                RoundedCornerShape(14.dp)
-            )
+            .background(if (selected) AccentBlue.copy(alpha = 0.15f) else SecondarySurface)
+            .border(1.dp, if (selected) AccentBlue else BorderColor, RoundedCornerShape(14.dp))
             .clickable { onClick() }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(label, color = if (selected) AccentBlue else TextPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -393,117 +344,69 @@ private fun ThemeCard(palette: AppPalette, selected: Boolean, onClick: () -> Uni
                 .fillMaxWidth()
                 .height(64.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(palette.background)
+                .background(if (palette.id == "paper") Color(0xFFFFFFFF) else Color(0xFF000000))
                 .border(
                     width = if (selected) 2.dp else 1.dp,
-                    color = if (selected) MaterialTheme.colorScheme.primary else palette.border,
+                    color = if (selected) AccentBlue else palette.border,
                     shape = RoundedCornerShape(16.dp)
                 )
                 .clickable { onClick() }
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .size(width = 36.dp, height = 10.dp)
-                    .background(palette.userBubble, RoundedCornerShape(6.dp))
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(8.dp)
-                    .size(16.dp)
-                    .background(palette.accent, CircleShape)
-            )
-            if (selected) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = tr("Selected", "محدد"),
-                    tint = palette.accent,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).size(16.dp)
-                )
-            }
+            Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(width = 36.dp, height = 10.dp).background(palette.userBubble, RoundedCornerShape(6.dp)))
+            Box(Modifier.align(Alignment.BottomStart).padding(8.dp).size(16.dp).background(palette.accent, CircleShape))
+            if (selected) Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).size(16.dp))
         }
         Spacer(Modifier.height(6.dp))
-        Text(
-            palette.name,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-        )
+        Text(palette.name, style = MaterialTheme.typography.bodySmall, color = TextPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
 @Composable
-private fun DefaultModelDialog(
-    account: Account,
-    models: List<String>,
-    onPick: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
+private fun DefaultModelDialog(account: Account, models: List<String>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(tr("Default model for ${account.label}", "النموذج الافتراضي لـ ${account.label}")) },
+        containerColor = CardDark,
+        title = { Text(tr("Default model for ${account.label}", "النموذج الافتراضي لـ ${account.label}"), color = TextPrimary) },
         text = {
             if (models.isEmpty()) {
-                Text(tr("No models loaded yet. Tap the refresh button on this account first.", "لم تُحمَّل النماذج بعد. اضغط زر التحديث لهذا الحساب أولاً."))
+                Text(tr("No models loaded yet.", "لم تُحمَّل النماذج بعد."), color = TextSecondary)
             } else {
                 LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
                     items(models) { id ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onPick(id) }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(id, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (id == account.model) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = tr("Current default", "الافتراضي الحالي"),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                        Row(Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(id, modifier = Modifier.weight(1f), color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (id == account.model) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Close", "إغلاق")) } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Close", "إغلاق"), color = AccentBlue) } }
     )
 }
 
-/** Clears the Puter web session so the next sign-in starts with a different account. */
 private fun clearPuterSession() {
     try {
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()
         WebStorage.getInstance().deleteAllData()
-    } catch (e: Exception) {
-        Log.w("Settings", "Could not clear the Puter session", e)
-    }
+    } catch (e: Exception) { Log.w("Settings", "Could not clear Puter session", e) }
 }
 
 private fun wipeLocalData(context: Context) {
     Thread {
-        try {
-            AppDatabase.getDatabase(context).clearAllTables()
-        } catch (e: Exception) {
-            Log.w("Settings", "Could not clear the chat database", e)
-        }
+        try { AppDatabase.getDatabase(context).clearAllTables() } catch (e: Exception) {}
         KeyVault.prefs(context).edit().clear().apply()
         context.getSharedPreferences("nexus_settings", Context.MODE_PRIVATE).edit().clear().apply()
+        context.getSharedPreferences("nexus_prefs", Context.MODE_PRIVATE).edit().clear().apply()
+        java.io.File(context.filesDir, "attachments").deleteRecursively()
+        java.io.File(context.cacheDir, "update.apk").delete()
     }.start()
     clearPuterSession()
 }
 
 @Composable
-private fun AddAccountDialog(
-    spec: ProviderSpec,
-    onDismiss: () -> Unit,
-    onSave: (label: String, baseUrl: String, model: String, apiKey: String) -> Unit
-) {
+private fun AddAccountDialog(spec: ProviderSpec, onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
     var label by remember { mutableStateOf(spec.name) }
     var baseUrl by remember { mutableStateOf(spec.baseUrl) }
     var model by remember { mutableStateOf(spec.defaultModel) }
@@ -512,46 +415,17 @@ private fun AddAccountDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(tr("Add ${spec.name}", "إضافة ${spec.name}")) },
+        containerColor = CardDark,
+        title = { Text(tr("Add ${spec.name}", "إضافة ${spec.name}"), color = TextPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = label,
-                    onValueChange = { label = it },
-                    label = { Text(tr("Account name", "اسم الحساب")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                OutlinedTextField(value = label, onValueChange = { label = it }, label = { Text(tr("Account name", "اسم الحساب")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (spec.needsKey) {
-                    OutlinedTextField(
-                        value = apiKey,
-                        onValueChange = { apiKey = it },
-                        label = { Text(tr("API key", "مفتاح API")) },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedTextField(value = apiKey, onValueChange = { apiKey = it }, label = { Text(tr("API key", "مفتاح API")) }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                 }
-                OutlinedTextField(
-                    value = baseUrl,
-                    onValueChange = { baseUrl = it },
-                    label = { Text(tr("Base URL (https://)", "رابط الأساس (https://)")) },
-                    singleLine = true,
-                    enabled = spec.editableBaseUrl,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = model,
-                    onValueChange = { model = it },
-                    label = { Text(tr("Default model (optional)", "النموذج الافتراضي (اختياري)")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    tr("All models are loaded from the provider after you save.", "تُحمَّل كل النماذج من المزود بعد الحفظ."),
-                    style = MaterialTheme.typography.bodySmall
-                )
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                OutlinedTextField(value = baseUrl, onValueChange = { baseUrl = it }, label = { Text(tr("Base URL (https://)", "رابط الأساس (https://)")) }, singleLine = true, enabled = spec.editableBaseUrl, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = model, onValueChange = { model = it }, label = { Text(tr("Default model (optional)", "النموذج الافتراضي (اختياري)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                error?.let { Text(it, color = Color.Red, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
@@ -562,8 +436,8 @@ private fun AddAccountDialog(
                     !url.startsWith("https://") -> error = tr("Base URL must start with https://", "يجب أن يبدأ رابط الأساس بـ https://")
                     else -> onSave(label.trim().ifEmpty { spec.name }, url, model.trim(), apiKey.trim())
                 }
-            }) { Text(tr("Save", "حفظ")) }
+            }) { Text(tr("Save", "حفظ"), color = AccentBlue) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "إلغاء")) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
     )
 }

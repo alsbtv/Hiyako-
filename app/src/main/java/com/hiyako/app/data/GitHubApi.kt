@@ -24,7 +24,7 @@ object GitHubApi {
 
     suspend fun getUserRepos(token: String): List<Repo> = withContext(Dispatchers.IO) {
         try {
-            client.newCall(authRequest("https://api.github.com/user/repos", token)).execute().use { response ->
+            client.newCall(authRequest("https://api.github.com/user/repos?per_page=100&sort=updated", token)).execute().use { response ->
                 if (!response.isSuccessful) return@withContext emptyList()
                 val jsonArray = JSONArray(response.body?.string() ?: "[]")
                 val repos = mutableListOf<Repo>()
@@ -48,7 +48,10 @@ object GitHubApi {
                     val item = tree.getJSONObject(i)
                     if (item.getString("type") == "blob") {
                         val path = item.getString("path")
-                        if (!path.contains("build/") && !path.contains(".git/") && (path.endsWith(".kt") || path.endsWith(".xml") || path.endsWith(".kts") || path.endsWith(".gradle"))) {
+                        if (!path.contains("build/") && !path.contains(".git/") && 
+                            (path.endsWith(".kt") || path.endsWith(".xml") || path.endsWith(".kts") || 
+                             path.endsWith(".gradle") || path.endsWith(".md") || path.endsWith(".json") || 
+                             path.endsWith(".properties") || path.endsWith(".pro") || path.endsWith(".toml"))) {
                             files.add(path)
                         }
                     }
@@ -65,7 +68,7 @@ object GitHubApi {
                 if (!response.isSuccessful) return@withContext null
                 val contentBase64 = JSONObject(response.body?.string() ?: "{}").optString("content").replace("\n", "")
                 if (contentBase64.isBlank()) return@withContext null
-                String(Base64.getDecoder().decode(contentBase64))
+                String(Base64.getDecoder().decode(contentBase64), Charsets.UTF_8)
             }
         } catch (e: Exception) { return@withContext null }
     }
@@ -74,9 +77,7 @@ object GitHubApi {
         try {
             val url = "https://api.github.com/repos/$owner/$repo/contents/$path"
             client.newCall(authRequest(url, token)).execute().use { response ->
-                if (response.isSuccessful) {
-                    return@withContext JSONObject(response.body?.string() ?: "{}").optString("sha")
-                }
+                if (response.isSuccessful) return@withContext JSONObject(response.body?.string() ?: "{}").optString("sha")
             }
         } catch (e: Exception) {}
         return@withContext null
@@ -87,7 +88,7 @@ object GitHubApi {
             val sha = getFileSha(token, owner, repo, path)
             val payload = JSONObject().apply {
                 put("message", commitMessage)
-                put("content", Base64.getEncoder().encodeToString(newContent.toByteArray()))
+                put("content", Base64.getEncoder().encodeToString(newContent.toByteArray(Charsets.UTF_8)))
                 if (sha != null) put("sha", sha)
             }
             
@@ -102,7 +103,6 @@ object GitHubApi {
         } catch (e: Exception) { return@withContext false }
     }
 
-    // دالة حذف الملفات
     suspend fun deleteFile(token: String, owner: String, repo: String, path: String, commitMessage: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val sha = getFileSha(token, owner, repo, path) ?: return@withContext false

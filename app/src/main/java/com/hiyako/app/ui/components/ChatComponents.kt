@@ -86,8 +86,6 @@ import com.hiyako.app.ui.theme.TextSecondary
 import com.hiyako.app.ui.theme.UserBubble
 import androidx.compose.ui.layout.ContentScale
 
-// ------------------------------------------------------------------ Clipboard and share
-
 fun chatCopyText(context: Context, text: String) {
     try {
         val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -103,16 +101,13 @@ fun chatShareText(context: Context, text: String) {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, text)
     }
-    val chooser = Intent.createChooser(intent, tr("Share", "مشاركة"))
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val chooser = Intent.createChooser(intent, tr("Share", "مشاركة")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     try {
         context.startActivity(chooser)
     } catch (e: Exception) {
         Toast.makeText(context, tr("Nothing to share with", "لا يوجد تطبيق للمشاركة"), Toast.LENGTH_SHORT).show()
     }
 }
-
-// ------------------------------------------------------------------ Messages
 
 @Composable
 fun UserMessage(text: String, type: String, attachmentUri: String?, attachmentName: String?) {
@@ -243,12 +238,7 @@ fun ErrorCard(message: String, onRetry: () -> Unit) {
         Icon(Icons.Default.Warning, null, tint = Color(0xFFF87171), modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                tr("Something went wrong", "حدث خطأ"),
-                color = TextPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text(tr("Something went wrong", "حدث خطأ"), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Text(message, color = TextSecondary, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
         TextButton(onClick = onRetry) {
@@ -256,8 +246,6 @@ fun ErrorCard(message: String, onRetry: () -> Unit) {
         }
     }
 }
-
-// ------------------------------------------------------------------ Markdown
 
 private sealed class MdBlock {
     class Para(val text: String) : MdBlock()
@@ -269,7 +257,7 @@ private sealed class MdBlock {
 }
 
 private val numberedRegex = Regex("^\\d+[.)]\\s+")
-private val headingRegex = Regex("^(#{1,6})\\s+(.*)$")
+private val headingRegex = Regex("^(#{1,6})\\s*(.*)$")
 
 private fun parseMarkdownBlocks(src: String): List<MdBlock> {
     val out = ArrayList<MdBlock>()
@@ -279,22 +267,10 @@ private fun parseMarkdownBlocks(src: String): List<MdBlock> {
     val quote = ArrayList<String>()
 
     fun flush() {
-        if (para.isNotEmpty()) {
-            out.add(MdBlock.Para(para.joinToString("\n")))
-            para.clear()
-        }
-        if (bullets.isNotEmpty()) {
-            out.add(MdBlock.Bullets(bullets.toList()))
-            bullets.clear()
-        }
-        if (numbers.isNotEmpty()) {
-            out.add(MdBlock.Numbers(numbers.toList()))
-            numbers.clear()
-        }
-        if (quote.isNotEmpty()) {
-            out.add(MdBlock.Quote(quote.joinToString("\n")))
-            quote.clear()
-        }
+        if (para.isNotEmpty()) { out.add(MdBlock.Para(para.joinToString("\n"))); para.clear() }
+        if (bullets.isNotEmpty()) { out.add(MdBlock.Bullets(bullets.toList())); bullets.clear() }
+        if (numbers.isNotEmpty()) { out.add(MdBlock.Numbers(numbers.toList())); numbers.clear() }
+        if (quote.isNotEmpty()) { out.add(MdBlock.Quote(quote.joinToString("\n"))); quote.clear() }
     }
 
     val lines = src.lines()
@@ -308,10 +284,7 @@ private fun parseMarkdownBlocks(src: String): List<MdBlock> {
                 val lang = trimmed.removePrefix("```").trim()
                 val code = ArrayList<String>()
                 i++
-                while (i < lines.size && !lines[i].trim().startsWith("```")) {
-                    code.add(lines[i])
-                    i++
-                }
+                while (i < lines.size && !lines[i].trim().startsWith("```")) { code.add(lines[i]); i++ }
                 out.add(MdBlock.Code(lang, code.joinToString("\n")))
             }
             trimmed.isEmpty() -> flush()
@@ -348,28 +321,17 @@ private fun inlineStyled(text: String): AnnotatedString = buildAnnotatedString {
         if (text.startsWith("**", i)) {
             val end = text.indexOf("**", i + 2)
             if (end > i + 2) {
-                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
-                    append(text.substring(i + 2, end))
-                }
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(text.substring(i + 2, end)) }
                 i = end + 2
-            } else {
-                append("**")
-                i += 2
-            }
+            } else { append("**"); i += 2 }
         } else if (text[i] == '`') {
             val end = text.indexOf('`', i + 1)
             if (end > i + 1) {
-                withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = AccentBlue)) {
-                    append(text.substring(i + 1, end))
-                }
+                withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = AccentBlue)) { append(text.substring(i + 1, end)) }
                 i = end + 1
-            } else {
-                append('`')
-                i++
-            }
+            } else { append('`'); i++ }
         } else {
-            append(text[i])
-            i++
+            append(text[i]); i++
         }
     }
 }
@@ -380,30 +342,13 @@ fun MarkdownText(text: String) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { block ->
             when (block) {
-                is MdBlock.Para -> Text(
-                    inlineStyled(block.text),
-                    color = TextPrimary,
-                    fontSize = 15.sp,
-                    lineHeight = 24.sp
-                )
-                is MdBlock.Head -> Text(
-                    inlineStyled(block.text),
-                    color = TextPrimary,
-                    fontSize = (22 - block.level * 2).sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = 28.sp
-                )
+                is MdBlock.Para -> Text(inlineStyled(block.text), color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp)
+                is MdBlock.Head -> Text(inlineStyled(block.text), color = TextPrimary, fontSize = (22 - block.level * 2).sp, fontWeight = FontWeight.Bold, lineHeight = 28.sp)
                 is MdBlock.Bullets -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     block.items.forEach { item ->
                         Row {
                             Text("•  ", color = AccentBlue, fontSize = 15.sp, lineHeight = 24.sp)
-                            Text(
-                                inlineStyled(item),
-                                color = TextPrimary,
-                                fontSize = 15.sp,
-                                lineHeight = 24.sp,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Text(inlineStyled(item), color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp, modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -411,31 +356,14 @@ fun MarkdownText(text: String) {
                     block.items.forEachIndexed { index, item ->
                         Row {
                             Text("${index + 1}.  ", color = AccentBlue, fontSize = 15.sp, lineHeight = 24.sp)
-                            Text(
-                                inlineStyled(item),
-                                color = TextPrimary,
-                                fontSize = 15.sp,
-                                lineHeight = 24.sp,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Text(inlineStyled(item), color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp, modifier = Modifier.weight(1f))
                         }
                     }
                 }
                 is MdBlock.Quote -> Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-                    Box(
-                        Modifier
-                            .width(3.dp)
-                            .fillMaxHeight()
-                            .background(AccentBlue, RoundedCornerShape(2.dp))
-                    )
+                    Box(Modifier.width(3.dp).fillMaxHeight().background(AccentBlue, RoundedCornerShape(2.dp)))
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        inlineStyled(block.text),
-                        color = TextSecondary,
-                        fontSize = 15.sp,
-                        lineHeight = 24.sp,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Text(inlineStyled(block.text), color = TextSecondary, fontSize = 15.sp, lineHeight = 24.sp, modifier = Modifier.weight(1f))
                 }
                 is MdBlock.Code -> CollapsibleCodeBlock(block.lang, block.code)
             }
@@ -450,57 +378,31 @@ fun CollapsibleCodeBlock(language: String, code: String) {
     val collapsible = lineCount > 12
     var expanded by remember(code) { mutableStateOf(!collapsible) }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF0D0D10))
-            .border(1.dp, Color(0xFF26262C), RoundedCornerShape(14.dp))
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFF0D0D10)).border(1.dp, Color(0xFF26262C), RoundedCornerShape(14.dp))
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().background(Color(0xFF17171C)).padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                language.ifBlank { "code" },
-                color = Color(0xFF9CA3AF),
-                fontSize = 12.sp,
-                modifier = Modifier.weight(1f)
-            )
+            Text(language.ifBlank { "code" }, color = Color(0xFF9CA3AF), fontSize = 12.sp, modifier = Modifier.weight(1f))
             if (collapsible) {
                 IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(30.dp)) {
-                    Icon(
-                        if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = tr("Expand or collapse", "فتح أو طي"),
-                        tint = Color(0xFF9CA3AF)
-                    )
+                    Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = tr("Expand or collapse", "فتح أو طي"), tint = Color(0xFF9CA3AF))
                 }
             }
             IconButton(onClick = { chatCopyText(context, code) }, modifier = Modifier.size(30.dp)) {
-                Icon(
-                    Icons.Outlined.ContentCopy,
-                    contentDescription = tr("Copy code", "نسخ الكود"),
-                    tint = Color(0xFF9CA3AF),
-                    modifier = Modifier.size(16.dp)
-                )
+                Icon(Icons.Outlined.ContentCopy, contentDescription = tr("Copy code", "نسخ الكود"), tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
             }
         }
         if (expanded) {
             SelectionContainer {
                 Box(Modifier.horizontalScroll(rememberScrollState()).padding(12.dp)) {
-                    Text(
-                        code,
-                        color = Color(0xFFE5E7EB),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                        lineHeight = 19.sp
-                    )
+                    Text(code, color = Color(0xFFE5E7EB), fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp)
                 }
             }
         }
     }
 }
-
-// ------------------------------------------------------------------ Composer and chips
 
 @Composable
 fun ComposerBar(
@@ -517,19 +419,12 @@ fun ComposerBar(
     onSearchClick: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        Row(
-            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        Row(modifier = Modifier.padding(start = 4.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ToggleChip(tr("Think", "تفكير"), isThinking, onThinkClick)
             ToggleChip(tr("Search", "بحث"), isSearch, onSearchClick)
         }
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(28.dp))
-                .background(ElevatedSurface)
-                .padding(start = 4.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(ElevatedSurface).padding(start = 4.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.Bottom
         ) {
             IconButton(onClick = onAttachClick, modifier = Modifier.size(44.dp)) {
@@ -545,9 +440,7 @@ fun ComposerBar(
                 modifier = Modifier.weight(1f).padding(vertical = 11.dp, horizontal = 4.dp),
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart) {
-                        if (input.isEmpty()) {
-                            Text(tr("Message", "اكتب رسالتك"), color = TextMuted, fontSize = 16.sp)
-                        }
+                        if (input.isEmpty()) Text(tr("Message", "اكتب رسالتك"), color = TextMuted, fontSize = 16.sp)
                         inner()
                     }
                 }
@@ -555,13 +448,9 @@ fun ComposerBar(
             Spacer(Modifier.width(4.dp))
             val active = isGenerating || canSend
             Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(if (active) AccentBlue else BorderColor)
-                    .clickable(enabled = active) {
-                        if (isGenerating) onStop() else onSend()
-                    },
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(if (active) AccentBlue else BorderColor).clickable(enabled = active) {
+                    if (isGenerating) onStop() else onSend()
+                },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -578,35 +467,19 @@ fun ComposerBar(
 @Composable
 private fun ToggleChip(label: String, active: Boolean, onClick: () -> Unit) {
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (active) AccentBlue.copy(alpha = 0.18f) else ElevatedSurface)
-            .border(1.dp, if (active) AccentBlue else BorderColor, RoundedCornerShape(50))
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (active) AccentBlue.copy(alpha = 0.18f) else ElevatedSurface).border(1.dp, if (active) AccentBlue else BorderColor, RoundedCornerShape(50)).clickable { onClick() }.padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
-        Text(
-            label,
-            color = if (active) AccentBlue else TextSecondary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
-        )
+        Text(label, color = if (active) AccentBlue else TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 fun SuggestionCard(title: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(SecondarySurface)
-            .border(1.dp, BorderColor, RoundedCornerShape(20.dp))
-            .clickable { onClick() }
-            .padding(14.dp)
+        modifier = modifier.clip(RoundedCornerShape(20.dp)).background(SecondarySurface).border(1.dp, BorderColor, RoundedCornerShape(20.dp)).clickable { onClick() }.padding(14.dp)
     ) {
         Text(title, color = TextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
     }
 }
 
-/** Used by the chat screen for the background colour behind the composer. */
 val ComposerBackground: Color get() = OledBlack
