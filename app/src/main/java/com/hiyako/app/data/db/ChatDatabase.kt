@@ -93,11 +93,12 @@ interface MemoryDao {
     suspend fun clearMemories()
 }
 
-@Database(entities = [ChatEntity::class, ConversationEntity::class, MemoryEntity::class], version = 4, exportSchema = false)
+@Database(entities = [ChatEntity::class, ConversationEntity::class, MemoryEntity::class, ReportEntity::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
     abstract fun conversationDao(): ConversationDao
     abstract fun memoryDao(): MemoryDao
+    abstract fun reportDao(): ReportDao
 
     companion object {
         @Volatile
@@ -109,7 +110,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "nexus_database"
-                ).fallbackToDestructiveMigration().build()
+                ).addMigrations(MIGRATION_4_5).fallbackToDestructiveMigration().build()
                 INSTANCE = instance
                 instance
             }

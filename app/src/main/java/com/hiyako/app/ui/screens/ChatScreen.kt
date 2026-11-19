@@ -541,7 +541,8 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                                 attachmentName = msg.senderName,
                                 showRegenerate = msg.id == lastAiId && !isGenerating,
                                 onRegenerate = { vm.regenerate() },
-                                onSpeak = { vm.speak(msg.content) }
+                                onSpeak = { vm.speak(msg.content) },
+                                onReport = { vm.reportMessage(msg.id, msg.content) }
                             )
                         }
                         if (partial != null) {

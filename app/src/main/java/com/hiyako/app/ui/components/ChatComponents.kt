@@ -287,7 +287,8 @@ fun MessageBubble(
     showActions: Boolean = true,
     showRegenerate: Boolean = false,
     onRegenerate: () -> Unit = {},
-    onSpeak: () -> Unit = {}
+    onSpeak: () -> Unit = {},
+    onReport: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val rtl = remember(text) { isRtlText(text) }
@@ -337,6 +338,12 @@ fun MessageBubble(
                             Spacer(Modifier.width(8.dp))
                             IconButton(onClick = onSpeak, modifier = Modifier.size(32.dp)) {
                                 Icon(Icons.Outlined.VolumeUp, "Speak", tint = TextMuted, modifier = Modifier.size(17.dp))
+                            }
+                            if (onReport != null) {
+                                Spacer(Modifier.width(8.dp))
+                                IconButton(onClick = onReport, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Warning, "Report", tint = TextMuted, modifier = Modifier.size(17.dp))
+                                }
                             }
                             if (showRegenerate) {
                                 Spacer(Modifier.width(8.dp))

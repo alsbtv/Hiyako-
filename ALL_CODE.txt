@@ -133,6 +133,20 @@ FILE: ./app/src/main/res/xml/file_paths.xml
 
 
 ========================================
+FILE: ./app/src/main/res/values/themes.xml
+========================================
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Hiyako" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+    </style>
+</resources>
+-e 
+
+
+========================================
 FILE: ./app/src/main/java/com/hiyako/app/NexusService.kt
 ========================================
 package com.hiyako.app
@@ -185,6 +199,304 @@ class NexusService : Service() {
 
 
 ========================================
+FILE: ./app/src/main/java/com/hiyako/app/engine/PuterEngine.kt
+========================================
+package com.hiyako.app.engine
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.os.Message
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONObject
+
+interface PuterListener {
+    fun onEngineReady()
+    fun onModelsReceived(json: String)
+    fun onChunk(reqId: String, text: String)
+    fun onDone(reqId: String)
+    fun onError(reqId: String, message: String)
+    fun onTitle(convoId: Int, title: String)
+    fun onAuth(signedIn: Boolean, username: String)
+    fun provideImage(reqId: String): String
+}
+
+/**
+ * Owns the hidden WebView that runs Puter.js. It lives as long as the ViewModel,
+ * so switching screens never destroys the page or an in-flight request.
+ */
+class PuterEngine(context: Context, private val listener: PuterListener) {
+
+    private val appContext: Context = context.applicationContext
+
+    private val _ready = MutableStateFlow(false)
+    val ready: StateFlow<Boolean> = _ready.asStateFlow()
+
+    private val _popup = MutableStateFlow<WebView?>(null)
+    val popup: StateFlow<WebView?> = _popup.asStateFlow()
+
+    val webView: WebView
+
+    init {
+        webView = createWebView()
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun createWebView(): WebView {
+        val wv = WebView(appContext)
+        wv.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        wv.settings.javaScriptEnabled = true
+        wv.settings.domStorageEnabled = true
+        wv.settings.setSupportMultipleWindows(true)
+        wv.settings.javaScriptCanOpenWindowsAutomatically = true
+        wv.webViewClient = WebViewClient()
+        wv.webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message?
+            ): Boolean {
+                if (resultMsg == null) return false
+                val popupView = WebView(appContext)
+                popupView.settings.javaScriptEnabled = true
+                popupView.settings.domStorageEnabled = true
+                popupView.settings.javaScriptCanOpenWindowsAutomatically = true
+                popupView.webViewClient = WebViewClient()
+                popupView.webChromeClient = object : WebChromeClient() {
+                    override fun onCloseWindow(window: WebView?) {
+                        closePopup()
+                    }
+                }
+                val transport = resultMsg.obj as WebView.WebViewTransport
+                transport.webView = popupView
+                resultMsg.sendToTarget()
+                _popup.value = popupView
+                return true
+            }
+        }
+        wv.addJavascriptInterface(Bridge(), "AndroidBridge")
+        wv.loadDataWithBaseURL(BASE_URL, PAGE_HTML, "text/html", "UTF-8", null)
+        return wv
+    }
+
+    fun closePopup() {
+        val p = _popup.value
+        _popup.value = null
+        if (p != null) {
+            p.post {
+                try {
+                    p.stopLoading()
+                    p.loadUrl("about:blank")
+                } catch (e: Exception) {
+                    // ignore
+                }
+            }
+        }
+    }
+
+    fun ask(reqId: String, messagesJson: String, model: String, hasImage: Boolean) {
+        val js = "window.ask(" + JSONObject.quote(reqId) + "," + JSONObject.quote(messagesJson) + "," +
+            JSONObject.quote(model) + "," + hasImage + ");"
+        run(js)
+    }
+
+    fun makeTitle(convoId: Int, text: String) {
+        run("window.makeTitle(" + convoId + "," + JSONObject.quote(text) + ");")
+    }
+
+    fun refreshModels() {
+        run("window.fetchModels();")
+    }
+
+    fun checkAuth() {
+        run("window.checkAuth();")
+    }
+
+    fun signIn() {
+        run("window.signIn();")
+    }
+
+    fun reload() {
+        _ready.value = false
+        webView.post { webView.loadDataWithBaseURL(BASE_URL, PAGE_HTML, "text/html", "UTF-8", null) }
+    }
+
+    fun destroy() {
+        try {
+            webView.destroy()
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
+    private fun run(js: String) {
+        webView.post { webView.evaluateJavascript(js, null) }
+    }
+
+    inner class Bridge {
+        @JavascriptInterface
+        fun onReady() {
+            _ready.value = true
+            listener.onEngineReady()
+        }
+
+        @JavascriptInterface
+        fun onModels(json: String) {
+            listener.onModelsReceived(json)
+        }
+
+        @JavascriptInterface
+        fun onChunk(reqId: String, text: String) {
+            listener.onChunk(reqId, text)
+        }
+
+        @JavascriptInterface
+        fun onDone(reqId: String) {
+            listener.onDone(reqId)
+        }
+
+        @JavascriptInterface
+        fun onError(reqId: String, message: String) {
+            listener.onError(reqId, message)
+        }
+
+        @JavascriptInterface
+        fun onTitle(convoId: String, title: String) {
+            val id = convoId.toIntOrNull() ?: return
+            listener.onTitle(id, title)
+        }
+
+        @JavascriptInterface
+        fun onAuth(signedIn: String, username: String) {
+            listener.onAuth(signedIn == "true", username)
+        }
+
+        @JavascriptInterface
+        fun getImage(reqId: String): String {
+            return listener.provideImage(reqId)
+        }
+    }
+
+    companion object {
+        // Keep this base URL identical to the old version so an existing Puter session in localStorage survives.
+        private const val BASE_URL = "https://appassets.androidplatform.net"
+
+        private val PAGE_HTML = """
+            <html><head><meta charset='utf-8'><script src='https://js.puter.com/v2/'></script></head><body>
+            <script>
+            function errText(e) {
+                try {
+                    if (!e) return 'Unknown error';
+                    if (typeof e === 'string') return e;
+                    if (e.message) return e.message;
+                    if (e.error && e.error.message) return e.error.message;
+                    if (e.error && typeof e.error === 'string') return e.error;
+                    return JSON.stringify(e);
+                } catch (x) { return 'Unknown error'; }
+            }
+            function contentText(c) {
+                if (c === null || c === undefined) return '';
+                if (typeof c === 'string') return c;
+                if (Array.isArray(c)) {
+                    return c.map(function (p) { return (p && p.text) ? p.text : (typeof p === 'string' ? p : ''); }).join('');
+                }
+                if (c.text) return c.text;
+                return JSON.stringify(c);
+            }
+            function respText(r) {
+                if (r === null || r === undefined) return '';
+                if (typeof r === 'string') return r;
+                if (r.message) return contentText(r.message.content);
+                if (r.text) return r.text;
+                return JSON.stringify(r);
+            }
+            window.fetchModels = function () {
+                try {
+                    puter.ai.listModels().then(function (models) {
+                        var result = models.map(function (m) {
+                            if (typeof m === 'string') return { id: m, name: m };
+                            return { id: m.id, name: m.name || m.id };
+                        });
+                        AndroidBridge.onModels(JSON.stringify(result));
+                    }).catch(function (e) {});
+                } catch (e) {}
+            };
+            window.ask = async function (reqId, msgsJson, model, hasImage) {
+                try {
+                    var msgs = JSON.parse(msgsJson);
+                    var opts = {};
+                    if (model) { opts.model = model; }
+                    var resp;
+                    if (hasImage) {
+                        var img = AndroidBridge.getImage(reqId);
+                        var prompt = contentText(msgs[msgs.length - 1].content);
+                        resp = await puter.ai.chat(prompt, img, false, opts);
+                    } else {
+                        opts.stream = true;
+                        resp = await puter.ai.chat(msgs, false, opts);
+                    }
+                    if (resp && resp.success === false) { throw resp; }
+                    if (resp && typeof resp[Symbol.asyncIterator] === 'function') {
+                        for await (var part of resp) {
+                            if (part && part.text) { AndroidBridge.onChunk(reqId, part.text); }
+                        }
+                    } else {
+                        var t = respText(resp);
+                        if (t) { AndroidBridge.onChunk(reqId, t); }
+                    }
+                    AndroidBridge.onDone(reqId);
+                } catch (e) {
+                    AndroidBridge.onError(reqId, errText(e));
+                }
+            };
+            window.makeTitle = function (convoId, text) {
+                try {
+                    var p = 'Write a short title (2 to 5 words) for a conversation that starts with the message below. Use the same language as the message. Output ONLY the title, with no quotes and no trailing punctuation.\n\nMessage: ' + String(text).substring(0, 300);
+                    puter.ai.chat(p).then(function (r) {
+                        var t = respText(r);
+                        if (t) { AndroidBridge.onTitle(String(convoId), t.trim()); }
+                    }).catch(function (e) {});
+                } catch (e) {}
+            };
+            window.checkAuth = function () {
+                try {
+                    if (puter.auth.isSignedIn()) {
+                        puter.auth.getUser().then(function (u) {
+                            AndroidBridge.onAuth('true', (u && u.username) ? u.username : '');
+                        }).catch(function (e) { AndroidBridge.onAuth('true', ''); });
+                    } else {
+                        AndroidBridge.onAuth('false', '');
+                    }
+                } catch (e) { AndroidBridge.onAuth('false', ''); }
+            };
+            window.signIn = function () {
+                try {
+                    puter.auth.signIn().then(function () {
+                        window.checkAuth();
+                        window.fetchModels();
+                    }).catch(function (e) {});
+                } catch (e) {}
+            };
+            (function boot() {
+                if (typeof puter === 'undefined') { setTimeout(boot, 300); return; }
+                AndroidBridge.onReady();
+                window.fetchModels();
+                window.checkAuth();
+            })();
+            </script></body></html>
+        """.trimIndent()
+    }
+}
+-e 
+
+
+========================================
 FILE: ./app/src/main/java/com/hiyako/app/HiyakoApplication.kt
 ========================================
 package com.hiyako.app
@@ -201,19 +513,51 @@ package com.hiyako.app.ui.components
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.VolumeUp
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -221,95 +565,297 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.hiyako.app.ui.theme.*
+import com.hiyako.app.ui.theme.AccentBlue
+import com.hiyako.app.ui.theme.ElevatedSurface
+import com.hiyako.app.ui.theme.SecondarySurface
+import com.hiyako.app.ui.theme.TextMuted
+import com.hiyako.app.ui.theme.TextPrimary
+import com.hiyako.app.ui.theme.TextSecondary
+import com.hiyako.app.ui.theme.UserBubble
+import com.hiyako.app.util.isRtlText
 import kotlinx.coroutines.delay
+
+private fun copyToClipboard(context: Context, label: String, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+}
 
 @Composable
 fun AnimatedLoadingText() {
     var dotCount by remember { mutableIntStateOf(1) }
-    LaunchedEffect(Unit) { while (true) { delay(500); dotCount = if (dotCount == 3) 1 else dotCount + 1 } }
-    Text(text = "Thinking${".".repeat(dotCount)}", color = AccentBlue, fontSize = 14.sp)
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(450)
+            dotCount = if (dotCount == 3) 1 else dotCount + 1
+        }
+    }
+    Text(
+        text = "Thinking" + ".".repeat(dotCount),
+        color = AccentBlue,
+        fontSize = 14.sp,
+        modifier = Modifier.padding(vertical = 6.dp)
+    )
 }
 
 @Composable
 fun CollapsibleCodeBlock(code: String, language: String = "code") {
-    var isExpanded by remember { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(true) }
     val context = LocalContext.current
 
-    Surface(color = Color(0xFF1E1E1E), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Column {
-            Row(Modifier.fillMaxWidth().background(Color(0xFF2D2D2D)).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(language, color = TextSecondary, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                Row {
-                    IconButton(onClick = { 
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("Code", code))
-                        Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
-                    }, modifier = Modifier.size(24.dp)) { Icon(Icons.Outlined.ContentCopy, "Copy", tint = TextSecondary, modifier = Modifier.size(16.dp)) }
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(onClick = { isExpanded = !isExpanded }, modifier = Modifier.size(24.dp)) { 
-                        Icon(if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, "Toggle", tint = TextSecondary, modifier = Modifier.size(16.dp)) 
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Surface(
+            color = Color(0xFF1E1E1E),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+        ) {
+            Column {
+                Row(
+                    Modifier.fillMaxWidth().background(Color(0xFF2D2D2D)).padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(language, color = Color(0xFFA1A1AA), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { copyToClipboard(context, "Code", code) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Outlined.ContentCopy, "Copy", tint = Color(0xFFA1A1AA), modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = { isExpanded = !isExpanded }, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                "Toggle",
+                                tint = Color(0xFFA1A1AA),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
+                if (isExpanded) {
+                    Text(
+                        code,
+                        color = Color(0xFFE0E0E0),
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                        fontFamily = FontFamily.Monospace,
+                        softWrap = false,
+                        modifier = Modifier.horizontalScroll(rememberScrollState()).padding(12.dp)
+                    )
+                }
             }
-            if (isExpanded) Text(code, color = Color(0xFFE0E0E0), fontSize = 13.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(12.dp))
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Lightweight Markdown rendering (headings, lists, bold, inline code, code fences)
+// ---------------------------------------------------------------------------
+
+sealed interface MdBlock
+data class MdText(val text: String, val heading: Int = 0, val marker: String? = null) : MdBlock
+data class MdCode(val lang: String, val code: String) : MdBlock
+
+private val numberedRegex = Regex("^(\\d+)[.)]\\s+(.*)$")
+
+fun parseMarkdown(src: String): List<MdBlock> {
+    val out = mutableListOf<MdBlock>()
+    val lines = src.lines()
+    var i = 0
+    while (i < lines.size) {
+        val line = lines[i]
+        val trimmed = line.trimStart()
+        if (trimmed.startsWith("```")) {
+            val lang = trimmed.removePrefix("```").trim()
+            val sb = StringBuilder()
+            i++
+            while (i < lines.size && !lines[i].trimStart().startsWith("```")) {
+                if (sb.isNotEmpty()) sb.append('\n')
+                sb.append(lines[i])
+                i++
+            }
+            out.add(MdCode(if (lang.isBlank()) "code" else lang, sb.toString()))
+            i++
+            continue
+        }
+        when {
+            line.isBlank() -> {}
+            trimmed.startsWith("### ") -> out.add(MdText(trimmed.removePrefix("### "), 3))
+            trimmed.startsWith("## ") -> out.add(MdText(trimmed.removePrefix("## "), 2))
+            trimmed.startsWith("# ") -> out.add(MdText(trimmed.removePrefix("# "), 1))
+            trimmed.startsWith("- ") || trimmed.startsWith("* ") -> out.add(MdText(trimmed.substring(2), 0, "•"))
+            else -> {
+                val m = numberedRegex.matchEntire(trimmed)
+                if (m != null) {
+                    out.add(MdText(m.groupValues[2], 0, m.groupValues[1] + "."))
+                } else {
+                    out.add(MdText(line, 0))
+                }
+            }
+        }
+        i++
+    }
+    return out
+}
+
+private fun inlineMarkdown(src: String, codeBackground: Color, codeColor: Color): AnnotatedString {
+    return buildAnnotatedString {
+        var i = 0
+        while (i < src.length) {
+            if (src.startsWith("**", i)) {
+                val end = src.indexOf("**", i + 2)
+                if (end > i + 2) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(src.substring(i + 2, end)) }
+                    i = end + 2
+                    continue
+                }
+            }
+            if (src[i] == '`') {
+                val end = src.indexOf('`', i + 1)
+                if (end > i + 1) {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = codeBackground, color = codeColor)) {
+                        append(src.substring(i + 1, end))
+                    }
+                    i = end + 1
+                    continue
+                }
+            }
+            append(src[i])
+            i++
+        }
+    }
+}
+
+@Composable
+fun MarkdownText(text: String) {
+    val blocks = remember(text) { parseMarkdown(text) }
+    Column(Modifier.fillMaxWidth()) {
+        blocks.forEach { block ->
+            when (block) {
+                is MdCode -> CollapsibleCodeBlock(block.code, block.lang)
+                is MdText -> {
+                    val styled = inlineMarkdown(block.text, ElevatedSurface, TextPrimary)
+                    val size = when (block.heading) {
+                        1 -> 21.sp
+                        2 -> 18.sp
+                        3 -> 16.sp
+                        else -> 15.sp
+                    }
+                    val weight = if (block.heading > 0) FontWeight.Bold else FontWeight.Normal
+                    val marker = block.marker
+                    if (marker != null) {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                            Text(marker, color = TextSecondary, fontSize = size, lineHeight = 24.sp, modifier = Modifier.width(26.dp))
+                            Text(
+                                styled,
+                                color = TextPrimary,
+                                fontSize = size,
+                                lineHeight = 24.sp,
+                                fontWeight = weight,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else {
+                        Text(
+                            styled,
+                            color = TextPrimary,
+                            fontSize = size,
+                            lineHeight = 24.sp,
+                            fontWeight = weight,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Message bubble
+// ---------------------------------------------------------------------------
 
 @Composable
 fun MessageBubble(
-    text: String, isUser: Boolean, isLoading: Boolean = false, type: String = "TEXT",
-    attachmentUri: String? = null, senderName: String? = null, onRegenerate: () -> Unit = {}, onSpeak: () -> Unit = {}
+    text: String,
+    isUser: Boolean,
+    type: String = "TEXT",
+    attachmentUri: String? = null,
+    attachmentName: String? = null,
+    showActions: Boolean = true,
+    showRegenerate: Boolean = false,
+    onRegenerate: () -> Unit = {},
+    onSpeak: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val rtl = remember(text) { isRtlText(text) }
+    val direction = if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr
+
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Top
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
-        Column(modifier = Modifier.weight(1f, fill = false), horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
-            if (!isUser && senderName != null) Text(senderName, color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
-            if (isLoading) AnimatedLoadingText()
-            else if (isUser) {
-                Surface(color = UserBubble, shape = RoundedCornerShape(20.dp)) {
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        CompositionLocalProvider(LocalLayoutDirection provides direction) {
+            if (isUser) {
+                Surface(color = UserBubble, shape = RoundedCornerShape(20.dp), modifier = Modifier.widthIn(max = 310.dp)) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                         if (attachmentUri != null && type == "IMAGE") {
-                            AsyncImage(model = attachmentUri, contentDescription = "Img", modifier = Modifier.size(150.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
-                            Spacer(Modifier.height(8.dp))
+                            AsyncImage(
+                                model = attachmentUri,
+                                contentDescription = "Image",
+                                modifier = Modifier.size(180.dp).clip(RoundedCornerShape(12.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                            if (text.isNotBlank()) Spacer(Modifier.height(8.dp))
                         }
-                        Text(text, color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp, textAlign = TextAlign.End, style = TextStyle(textDirection = TextDirection.Content))
+                        if (type == "FILE") {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(attachmentName ?: "File", color = TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            if (text.isNotBlank()) Spacer(Modifier.height(8.dp))
+                        }
+                        if (text.isNotBlank()) {
+                            SelectionContainer {
+                                Text(text, color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp)
+                            }
+                        }
                     }
                 }
             } else {
-                if (text.contains("```")) {
-                    val parts = text.split("```")
-                    parts.forEachIndexed { index, part ->
-                        if (index % 2 == 0) { if (part.isNotBlank()) Text(part.trim(), color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp) }
-                        else { val lines = part.lines(); val lang = lines.firstOrNull() ?: "code"; CollapsibleCodeBlock(lines.drop(1).joinToString("\n"), lang) }
+                Column(Modifier.fillMaxWidth()) {
+                    SelectionContainer { MarkdownText(text) }
+                    if (showActions) {
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { copyToClipboard(context, "AI", text) }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Outlined.ContentCopy, "Copy", tint = TextMuted, modifier = Modifier.size(17.dp))
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            IconButton(onClick = onSpeak, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Outlined.VolumeUp, "Speak", tint = TextMuted, modifier = Modifier.size(17.dp))
+                            }
+                            if (showRegenerate) {
+                                Spacer(Modifier.width(8.dp))
+                                IconButton(onClick = onRegenerate, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Outlined.Refresh, "Regenerate", tint = TextMuted, modifier = Modifier.size(17.dp))
+                                }
+                            }
+                        }
                     }
-                } else {
-                    Text(text.replace("**", "").trim(), color = TextPrimary, fontSize = 15.sp, lineHeight = 24.sp, textAlign = TextAlign.Start, style = TextStyle(textDirection = TextDirection.Content))
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { 
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("AI", text))
-                        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                    }, modifier = Modifier.size(24.dp)) { Icon(Icons.Outlined.ContentCopy, "Copy", tint = TextMuted, modifier = Modifier.size(16.dp)) }
-                    Spacer(Modifier.width(16.dp))
-                    IconButton(onClick = onSpeak, modifier = Modifier.size(24.dp)) { Icon(Icons.Outlined.VolumeUp, "Speak", tint = TextMuted, modifier = Modifier.size(16.dp)) }
-                    Spacer(Modifier.width(16.dp))
-                    IconButton(onClick = onRegenerate, modifier = Modifier.size(24.dp)) { Icon(Icons.Outlined.Refresh, "Regen", tint = TextMuted, modifier = Modifier.size(16.dp)) }
                 }
             }
         }
@@ -317,29 +863,113 @@ fun MessageBubble(
 }
 
 @Composable
-fun ChatInputBar(
-    input: String, onInputChange: (String) -> Unit, onSend: () -> Unit, isLoading: Boolean,
-    onAttachClick: () -> Unit, isThinking: Boolean, onThinkClick: () -> Unit, isSearch: Boolean, onSearchClick: () -> Unit,
-    onVoiceClick: () -> Unit
-) {
-    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.BottomCenter) {
-        Row(Modifier.fillMaxWidth().imePadding().background(SecondarySurface, RoundedCornerShape(24.dp)).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onAttachClick, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Add, null, tint = TextSecondary) }
-            BasicTextField(value = input, onValueChange = onInputChange, modifier = Modifier.weight(1f).padding(horizontal = 8.dp), textStyle = TextStyle(color = TextPrimary, fontSize = 15.sp), cursorBrush = SolidColor(AccentBlue), maxLines = 4, decorationBox = { inner -> Box { if (input.isEmpty()) Text("Message...", color = TextMuted, fontSize = 15.sp); inner() } })
-            Row(Modifier.padding(horizontal = 4.dp)) {
-                Surface(shape = RoundedCornerShape(16.dp), color = if (isThinking) AccentBlue.copy(alpha = 0.2f) else ElevatedSurface, modifier = Modifier.clickable { onThinkClick() }) {
-                    Text("Think", color = if (isThinking) AccentBlue else TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
+fun ErrorBubble(message: String, onRetry: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Surface(color = Color(0x33EF4444), shape = RoundedCornerShape(14.dp)) {
+            Column(Modifier.padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(message, color = TextPrimary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f, fill = false))
                 }
-                Spacer(Modifier.width(4.dp))
-                Surface(shape = RoundedCornerShape(16.dp), color = if (isSearch) AccentBlue.copy(alpha = 0.2f) else ElevatedSurface, modifier = Modifier.clickable { onSearchClick() }) {
-                    Text("Search", color = if (isSearch) AccentBlue else TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
-                }
-            }
-            IconButton(onClick = onVoiceClick, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Mic, null, tint = TextSecondary) }
-            FilledIconButton(onClick = onSend, enabled = input.isNotBlank(), colors = IconButtonDefaults.filledIconButtonColors(containerColor = if (input.isNotBlank()) AccentBlue else Color.Transparent), modifier = Modifier.size(36.dp)) {
-                Icon(Icons.AutoMirrored.Filled.Send, null, tint = if (input.isNotBlank()) TextPrimary else TextMuted, modifier = Modifier.size(18.dp))
+                TextButton(onClick = onRetry) { Text("Retry", color = AccentBlue) }
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Input bar
+// ---------------------------------------------------------------------------
+
+@Composable
+fun ChatInputBar(
+    input: String,
+    onInputChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+    isGenerating: Boolean,
+    canSend: Boolean,
+    onAttachClick: () -> Unit,
+    isThinking: Boolean,
+    onThinkClick: () -> Unit,
+    isSearch: Boolean,
+    onSearchClick: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .background(SecondarySurface, RoundedCornerShape(24.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onAttachClick, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Add, "Attach", tint = TextSecondary)
+        }
+        BasicTextField(
+            value = input,
+            onValueChange = onInputChange,
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            textStyle = TextStyle(color = TextPrimary, fontSize = 15.sp, textDirection = TextDirection.Content),
+            cursorBrush = SolidColor(AccentBlue),
+            maxLines = 6,
+            decorationBox = { inner ->
+                Box {
+                    if (input.isEmpty()) Text("Message...", color = TextMuted, fontSize = 15.sp)
+                    inner()
+                }
+            }
+        )
+        Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            ToggleChip("Think", isThinking, onThinkClick)
+            Spacer(Modifier.width(4.dp))
+            ToggleChip("Search", isSearch, onSearchClick)
+        }
+        Spacer(Modifier.width(4.dp))
+        if (isGenerating) {
+            FilledIconButton(
+                onClick = onStop,
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = AccentBlue),
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(Icons.Default.Stop, "Stop", tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+        } else {
+            FilledIconButton(
+                onClick = onSend,
+                enabled = canSend,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = AccentBlue,
+                    disabledContainerColor = ElevatedSurface
+                ),
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Send,
+                    "Send",
+                    tint = if (canSend) Color.White else TextMuted,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToggleChip(label: String, active: Boolean, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (active) AccentBlue else ElevatedSurface,
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Text(
+            label,
+            color = if (active) Color.White else TextSecondary,
+            fontSize = 12.sp,
+            fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        )
     }
 }
 -e 
@@ -351,27 +981,40 @@ FILE: ./app/src/main/java/com/hiyako/app/ui/theme/Theme.kt
 package com.hiyako.app.ui.theme
 
 import android.app.Activity
+import android.graphics.drawable.ColorDrawable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-val OledBlack = Color(0xFF000000)
-val DeepSurface = Color(0xFF0A0A0A)
-val SecondarySurface = Color(0xFF141414)
-val ElevatedSurface = Color(0xFF1B1B1B)
-val UserBubble = Color(0xFF2A2A2A)
-val BorderColor = Color(0xFF27272A)
-val TextPrimary = Color(0xFFFFFFFF)
-val TextSecondary = Color(0xFFA1A1AA)
-val TextMuted = Color(0xFF71717A)
+/**
+ * Snapshot-state holder so every color below follows the active theme automatically,
+ * without having to change the call sites in the other screens.
+ */
+object ThemeState {
+    var isDark by mutableStateOf(true)
+}
+
+val OledBlack: Color get() = if (ThemeState.isDark) Color(0xFF000000) else Color(0xFFFFFFFF)
+val DeepSurface: Color get() = if (ThemeState.isDark) Color(0xFF0A0A0A) else Color(0xFFFAFAFA)
+val SecondarySurface: Color get() = if (ThemeState.isDark) Color(0xFF141414) else Color(0xFFF4F4F5)
+val ElevatedSurface: Color get() = if (ThemeState.isDark) Color(0xFF1B1B1B) else Color(0xFFE9E9EC)
+val UserBubble: Color get() = if (ThemeState.isDark) Color(0xFF2A2A2A) else Color(0xFFE4E4E7)
+val BorderColor: Color get() = if (ThemeState.isDark) Color(0xFF27272A) else Color(0xFFD4D4D8)
+val TextPrimary: Color get() = if (ThemeState.isDark) Color(0xFFFFFFFF) else Color(0xFF18181B)
+val TextSecondary: Color get() = if (ThemeState.isDark) Color(0xFFA1A1AA) else Color(0xFF52525B)
+val TextMuted: Color get() = if (ThemeState.isDark) Color(0xFF71717A) else Color(0xFF8A8A93)
+val CardDark: Color get() = if (ThemeState.isDark) Color(0xFF141414) else Color(0xFFF4F4F5)
 val AccentBlue = Color(0xFF3B82F6)
-val CardDark = Color(0xFF141414)
 
 val LightBackground = Color(0xFFFFFFFF)
 val LightSurface = Color(0xFFF4F4F5)
@@ -380,23 +1023,44 @@ val LightTextPrimary = Color(0xFF18181B)
 val LightTextSecondary = Color(0xFF52525B)
 
 private val DarkColorScheme = darkColorScheme(
-    primary = AccentBlue, onPrimary = TextPrimary, background = OledBlack, onBackground = TextPrimary, surface = DeepSurface, onSurface = TextPrimary, surfaceVariant = SecondarySurface, onSurfaceVariant = TextSecondary, outline = BorderColor
+    primary = AccentBlue,
+    onPrimary = Color(0xFFFFFFFF),
+    background = Color(0xFF000000),
+    onBackground = Color(0xFFFFFFFF),
+    surface = Color(0xFF0A0A0A),
+    onSurface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFF141414),
+    onSurfaceVariant = Color(0xFFA1A1AA),
+    outline = Color(0xFF27272A)
 )
+
 private val LightColorScheme = lightColorScheme(
-    primary = AccentBlue, onPrimary = Color.White, background = LightBackground, onBackground = LightTextPrimary, surface = LightSurface, onSurface = LightTextPrimary, surfaceVariant = LightUserBubble, onSurfaceVariant = LightTextSecondary, outline = Color.LightGray
+    primary = AccentBlue,
+    onPrimary = Color.White,
+    background = LightBackground,
+    onBackground = LightTextPrimary,
+    surface = LightSurface,
+    onSurface = LightTextPrimary,
+    surfaceVariant = LightUserBubble,
+    onSurfaceVariant = LightTextSecondary,
+    outline = Color.LightGray
 )
 
 @Composable
 fun AppTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    if (ThemeState.isDark != darkTheme) ThemeState.isDark = darkTheme
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+            val bg = colorScheme.background.toArgb()
+            window.statusBarColor = bg
+            window.navigationBarColor = bg
+            window.setBackgroundDrawable(ColorDrawable(bg))
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !darkTheme
+            controller.isAppearanceLightNavigationBars = !darkTheme
         }
     }
     MaterialTheme(colorScheme = colorScheme, content = content)
@@ -614,144 +1278,415 @@ FILE: ./app/src/main/java/com/hiyako/app/ui/screens/ChatScreen.kt
 ========================================
 package com.hiyako.app.ui.screens
 
-import android.annotation.SuppressLint
-import android.app.Dialog
 import android.net.Uri
-import android.os.Message
-import android.view.WindowManager
-import android.webkit.WebChromeClient
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.hiyako.app.data.db.ConversationEntity
+import com.hiyako.app.ui.components.AnimatedLoadingText
 import com.hiyako.app.ui.components.ChatInputBar
+import com.hiyako.app.ui.components.ErrorBubble
 import com.hiyako.app.ui.components.MessageBubble
-import com.hiyako.app.ui.theme.*
+import com.hiyako.app.ui.theme.AccentBlue
+import com.hiyako.app.ui.theme.BorderColor
+import com.hiyako.app.ui.theme.CardDark
+import com.hiyako.app.ui.theme.DeepSurface
+import com.hiyako.app.ui.theme.ElevatedSurface
+import com.hiyako.app.ui.theme.OledBlack
+import com.hiyako.app.ui.theme.SecondarySurface
+import com.hiyako.app.ui.theme.TextMuted
+import com.hiyako.app.ui.theme.TextPrimary
+import com.hiyako.app.ui.theme.TextSecondary
+import com.hiyako.app.util.queryDisplayName
 import kotlinx.coroutines.launch
 
-@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun SearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .background(ElevatedSurface, RoundedCornerShape(22.dp))
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Search, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp, textDirection = TextDirection.Content),
+            cursorBrush = SolidColor(AccentBlue),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) Text(placeholder, color = TextMuted, fontSize = 14.sp)
+                    inner()
+                }
+            }
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun ModelPickerSheet(
+    models: List<AiModel>,
+    selectedId: String,
+    onSelect: (AiModel) -> Unit,
+    onRefresh: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var q by remember { mutableStateOf("") }
+    val filtered = remember(models, q) {
+        if (q.isBlank()) models else models.filter { it.name.contains(q, true) || it.id.contains(q, true) }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = CardDark) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.8f).padding(horizontal = 16.dp)) {
+            Text("Choose a model", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            if (models.isEmpty()) {
+                Text(
+                    "No models loaded yet. Check your internet connection and Puter sign-in, then refresh.",
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+                TextButton(onClick = onRefresh) { Text("Refresh", color = AccentBlue) }
+            } else {
+                SearchField(q, { q = it }, "Search models...")
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(Modifier.weight(1f)) {
+                    items(filtered, key = { it.id }) { m ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(m) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(m.name, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (m.id.isNotEmpty() && m.id != m.name) {
+                                    Text(m.id, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            if (m.id == selectedId) {
+                                Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
 fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewModel()) {
+    val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
     var input by remember { mutableStateOf("") }
-    var selectedAttachmentUri by remember { mutableStateOf<Uri?>(null) }
-    var selectedAttachmentType by remember { mutableStateOf<String?>(null) }
-    
+    var attachmentUri by remember { mutableStateOf<Uri?>(null) }
+    var showAttachmentSheet by remember { mutableStateOf(false) }
+    var showModelSheet by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<ConversationEntity?>(null) }
+    var deleteTargets by remember { mutableStateOf<List<Int>?>(null) }
+    var query by remember { mutableStateOf("") }
+    var expandedMenuId by remember { mutableStateOf<Int?>(null) }
+    var stickToBottom by remember { mutableStateOf(true) }
+
     val messages by vm.messages.collectAsState()
     val conversations by vm.conversations.collectAsState()
     val chatTitle by vm.chatTitle.collectAsState()
-    val activeConversationId by vm.activeConversationId.collectAsState()
-    val isAnyLoading = messages.any { it.isLoading }
-    
-    var webView by remember { mutableStateOf<WebView?>(null) }
-    var showLoginView by remember { mutableStateOf(false) }
-    var showAttachmentSheet by remember { mutableStateOf(false) }
-    var expandedMenuId by remember { mutableStateOf<Int?>(null) }
+    val activeId by vm.activeConversationId.collectAsState()
+    val generating by vm.generating.collectAsState()
+    val errors by vm.errors.collectAsState()
+    val models by vm.availableModels.collectAsState()
+    val selectedModel by vm.selectedModel.collectAsState()
+    val auth by vm.auth.collectAsState()
 
-    // File Picker
-    val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) { selectedAttachmentUri = uri; selectedAttachmentType = "file" }
+    val partial: String? = activeId?.let { generating[it] }
+    val errorText: String? = activeId?.let { errors[it] }
+    val isGenerating = partial != null
+    val lastAiId: Int? = messages.lastOrNull()?.takeIf { !it.isUser }?.id
+    val totalItems = messages.size + (if (partial != null) 1 else 0) + (if (errorText != null) 1 else 0)
+
+    val attachmentMime = remember(attachmentUri) {
+        attachmentUri?.let { context.contentResolver.getType(it) } ?: ""
     }
-    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) { selectedAttachmentUri = uri; selectedAttachmentType = "image" }
+    val attachmentName = remember(attachmentUri) {
+        attachmentUri?.let { queryDisplayName(context, it) } ?: ""
+    }
+
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) attachmentUri = uri
+    }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) attachmentUri = uri
     }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(messages.size) { if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1) }
+
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (!scrolling) stickToBottom = !listState.canScrollForward
+        }
+    }
+    LaunchedEffect(activeId) { stickToBottom = true }
+    LaunchedEffect(partial, totalItems, activeId) {
+        if (stickToBottom && totalItems > 0) listState.scrollBy(100000f)
+    }
+
+    BackHandler(enabled = vm.isMultiSelectMode) {
+        vm.isMultiSelectMode = false
+        vm.selectedChatIds.clear()
+    }
+
+    val send: () -> Unit = {
+        if (!vm.canSend()) {
+            Toast.makeText(context, "Connecting to the AI engine... check your internet and try again", Toast.LENGTH_SHORT).show()
+        } else {
+            vm.sendMessage(input, attachmentUri)
+            input = ""
+            attachmentUri = null
+            stickToBottom = true
+        }
+    }
+
+    val filteredConversations = remember(conversations, query) {
+        if (query.isBlank()) conversations else conversations.filter { it.title.contains(query, ignoreCase = true) }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = DeepSurface, modifier = Modifier.width(300.dp)) {
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
-                    OutlinedTextField(
-                        value = "", onValueChange = {}, placeholder = { Text("Search...", color = TextMuted, fontSize = 14.sp) },
-                        modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = CardDark, unfocusedBorderColor = Color.Transparent),
-                        leadingIcon = { Icon(Icons.Default.Search, null, tint = TextSecondary, modifier = Modifier.size(20.dp)) }
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    
-                    Row(Modifier.fillMaxWidth().clickable { vm.createNewConversation(); scope.launch { drawerState.close() } }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SearchField(query, { query = it }, "Search chats...")
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                vm.createNewConversation()
+                                scope.launch { drawerState.close() }
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(Icons.Default.Add, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(12.dp))
                         Text("New Chat", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
-                    Row(Modifier.fillMaxWidth().clickable { vm.createNewConversation(isGroup = true); scope.launch { drawerState.close() } }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Group, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text("New Group Chat", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    }
-                    Divider(color = BorderColor)
+                    HorizontalDivider(color = BorderColor)
 
                     LazyColumn(Modifier.weight(1f)) {
-                        items(conversations) { chat ->
-                            Box {
-                                Row(
-                                    Modifier.fillMaxWidth().background(if (vm.selectedChatIds.contains(chat.id)) SecondarySurface else Color.Transparent, RoundedCornerShape(8.dp))
-                                        .clickable { 
+                        items(filteredConversations, key = { it.id }) { chat ->
+                            val selected = vm.selectedChatIds.contains(chat.id)
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (selected || chat.id == activeId) SecondarySurface else Color.Transparent
+                                    )
+                                    .combinedClickable(
+                                        onClick = {
                                             if (vm.isMultiSelectMode) {
-                                                if (vm.selectedChatIds.contains(chat.id)) vm.selectedChatIds.remove(chat.id) else vm.selectedChatIds.add(chat.id)
+                                                if (selected) vm.selectedChatIds.remove(chat.id) else vm.selectedChatIds.add(chat.id)
                                             } else {
-                                                vm.selectConversation(chat.id); scope.launch { drawerState.close() }
+                                                vm.selectConversation(chat.id)
+                                                scope.launch { drawerState.close() }
                                             }
-                                        }.padding(vertical = 10.dp, horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (vm.isMultiSelectMode) {
-                                        Checkbox(checked = vm.selectedChatIds.contains(chat.id), onCheckedChange = { 
+                                        },
+                                        onLongClick = {
+                                            if (!vm.isMultiSelectMode) {
+                                                vm.isMultiSelectMode = true
+                                                vm.selectedChatIds.clear()
+                                                vm.selectedChatIds.add(chat.id)
+                                            }
+                                        }
+                                    )
+                                    .padding(vertical = 6.dp, horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (vm.isMultiSelectMode) {
+                                    Checkbox(
+                                        checked = selected,
+                                        onCheckedChange = {
                                             if (it) vm.selectedChatIds.add(chat.id) else vm.selectedChatIds.remove(chat.id)
-                                        }, colors = CheckboxDefaults.colors(checkedColor = AccentBlue))
-                                    } else {
-                                        if (chat.isPinned) { Icon(Icons.Default.PushPin, null, tint = TextSecondary, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
-                                        Text(chat.title, color = TextPrimary, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
-                                        IconButton(onClick = { expandedMenuId = chat.id }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.MoreVert, null, tint = TextSecondary, modifier = Modifier.size(18.dp)) }
+                                        },
+                                        colors = CheckboxDefaults.colors(checkedColor = AccentBlue)
+                                    )
+                                    Text(chat.title, color = TextPrimary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                } else {
+                                    if (chat.isPinned) {
+                                        Icon(Icons.Default.PushPin, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
                                     }
-                                }
-                                DropdownMenu(expanded = expandedMenuId == chat.id, onDismissRequest = { expandedMenuId = null }, properties = PopupProperties(focusable = true)) {
-                                    DropdownMenuItem(text = { Text("Rename") }, onClick = { vm.renameChat(chat.id, "Renamed Chat"); expandedMenuId = null })
-                                    DropdownMenuItem(text = { Text(if (chat.isPinned) "Unpin" else "Pin") }, onClick = { vm.togglePin(chat.id, !chat.isPinned); expandedMenuId = null })
-                                    DropdownMenuItem(text = { Text("Delete", color = Color.Red) }, onClick = { vm.deleteChat(chat.id); expandedMenuId = null })
+                                    Text(chat.title, color = TextPrimary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    Box {
+                                        IconButton(onClick = { expandedMenuId = chat.id }, modifier = Modifier.size(32.dp)) {
+                                            Icon(Icons.Default.MoreVert, "Menu", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                        }
+                                        DropdownMenu(expanded = expandedMenuId == chat.id, onDismissRequest = { expandedMenuId = null }) {
+                                            DropdownMenuItem(text = { Text("Rename") }, onClick = {
+                                                renameTarget = chat
+                                                expandedMenuId = null
+                                            })
+                                            DropdownMenuItem(text = { Text(if (chat.isPinned) "Unpin" else "Pin") }, onClick = {
+                                                vm.togglePin(chat.id, !chat.isPinned)
+                                                expandedMenuId = null
+                                            })
+                                            DropdownMenuItem(text = { Text("Delete", color = Color.Red) }, onClick = {
+                                                deleteTargets = listOf(chat.id)
+                                                expandedMenuId = null
+                                            })
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
                     if (vm.isMultiSelectMode) {
-                        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            TextButton(onClick = { vm.selectedChatIds.forEach { vm.togglePin(it, true) }; vm.isMultiSelectMode = false; vm.selectedChatIds.clear() }) { Text("Pin", color = TextSecondary) }
-                            TextButton(onClick = { vm.selectedChatIds.forEach { vm.deleteChat(it) }; vm.isMultiSelectMode = false; vm.selectedChatIds.clear() }) { Text("Delete", color = Color.Red) }
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(onClick = {
+                                vm.isMultiSelectMode = false
+                                vm.selectedChatIds.clear()
+                            }) { Text("Cancel", color = TextSecondary) }
+                            TextButton(onClick = {
+                                vm.selectedChatIds.toList().forEach { vm.togglePin(it, true) }
+                                vm.isMultiSelectMode = false
+                                vm.selectedChatIds.clear()
+                            }) { Text("Pin", color = TextSecondary) }
+                            TextButton(
+                                onClick = { if (vm.selectedChatIds.isNotEmpty()) deleteTargets = vm.selectedChatIds.toList() }
+                            ) { Text("Delete (" + vm.selectedChatIds.size + ")", color = Color.Red) }
                         }
                     }
 
-                    Divider(color = BorderColor)
-                    Row(Modifier.fillMaxWidth().clickable { scope.launch { drawerState.close() }; onNavigateToSettings() }.padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(32.dp).background(TextSecondary, CircleShape), contentAlignment = Alignment.Center) { Text("W", color = Color.Black, fontSize = 14.sp) }
+                    HorizontalDivider(color = BorderColor)
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                scope.launch { drawerState.close() }
+                                onNavigateToSettings()
+                            }
+                            .padding(vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(Modifier.size(32.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
+                            Text(
+                                auth.username.firstOrNull()?.uppercase() ?: "?",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                         Spacer(Modifier.width(12.dp))
-                        Text("Settings", color = TextPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) {
+                            Text("Settings", color = TextPrimary, fontSize = 15.sp)
+                            Text(
+                                if (auth.signedIn) (if (auth.username.isNotEmpty()) auth.username else "Signed in") else "Not signed in",
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
+                        }
                         Icon(Icons.Default.Settings, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
                     }
                 }
@@ -759,124 +1694,244 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
         }
     ) {
         Scaffold(
-            containerColor = OledBlack, modifier = Modifier.imePadding().fillMaxSize(),
+            containerColor = OledBlack,
+            modifier = Modifier.imePadding().fillMaxSize(),
             topBar = {
-                if (!showLoginView) {
-                    Row(Modifier.fillMaxWidth().padding(top = 16.dp, start = 12.dp, end = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Menu, null, tint = Color.White, modifier = Modifier.size(24.dp)) }
-                        Text(chatTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        IconButton(onClick = { showLoginView = true }, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.AccountCircle, null, tint = Color.White, modifier = Modifier.size(24.dp)) }
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 10.dp, start = 8.dp, end = 8.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(Icons.Default.Menu, "Menu", tint = TextPrimary, modifier = Modifier.size(24.dp))
+                    }
+                    Column(
+                        Modifier.weight(1f).clickable { showModelSheet = true },
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            chatTitle,
+                            color = TextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                selectedModel.name,
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            Icon(Icons.Default.ArrowDropDown, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    IconButton(onClick = {
+                        if (!auth.signedIn) {
+                            vm.signIn()
+                        } else {
+                            Toast.makeText(context, "Signed in as " + auth.username, Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Icon(
+                            Icons.Default.AccountCircle,
+                            "Account",
+                            tint = if (auth.signedIn) AccentBlue else TextPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             },
             bottomBar = {
-                if (!showLoginView) {
-                    Column {
-                        if (selectedAttachmentUri != null) {
-                            Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("📎 Attachment ready: ${selectedAttachmentUri!!.lastPathSegment}", color = AccentBlue, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                                IconButton(onClick = { selectedAttachmentUri = null; selectedAttachmentType = null }) { Icon(Icons.Default.Close, null, tint = Color.Red, modifier = Modifier.size(16.dp)) }
+                Column(Modifier.background(OledBlack)) {
+                    if (attachmentUri != null) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                .background(SecondarySurface, RoundedCornerShape(12.dp))
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (attachmentMime.startsWith("image/")) {
+                                AsyncImage(
+                                    model = attachmentUri,
+                                    contentDescription = "Attachment",
+                                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                attachmentName,
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = { attachmentUri = null }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Close, "Remove", tint = TextSecondary, modifier = Modifier.size(18.dp))
                             }
                         }
-                        ChatInputBar(
-                            input = input, 
-                            onInputChange = { input = it }, 
-                            onSend = { vm.sendMessage(input, selectedAttachmentUri, selectedAttachmentType, webView); input = ""; selectedAttachmentUri = null }, 
-                            isLoading = isAnyLoading,
-                            onAttachClick = { showAttachmentSheet = true },
-                            isThinking = vm.isThinkingMode,
-                            onThinkClick = { vm.toggleThink() },
-                            isSearch = vm.isSearchMode,
-                            onVoiceClick = { },
-                            onSearchClick = { vm.toggleSearch() }
-                        )
                     }
+                    ChatInputBar(
+                        input = input,
+                        onInputChange = { input = it },
+                        onSend = send,
+                        onStop = { vm.stopGeneration() },
+                        isGenerating = isGenerating,
+                        canSend = input.isNotBlank() || attachmentUri != null,
+                        onAttachClick = { showAttachmentSheet = true },
+                        isThinking = vm.isThinkingMode,
+                        onThinkClick = { vm.toggleThink() },
+                        isSearch = vm.isSearchMode,
+                        onSearchClick = { vm.toggleSearch() }
+                    )
                 }
             }
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize().background(OledBlack)) {
-                if (!showLoginView) {
-                    if (messages.isEmpty()) {
-                        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Text("كيف أساعدك اليوم؟", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+                if (messages.isEmpty() && partial == null && errorText == null) {
+                    Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text("كيف أساعدك اليوم؟", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        items(messages, key = { it.id }) { msg ->
+                            MessageBubble(
+                                text = msg.content,
+                                isUser = msg.isUser,
+                                type = msg.type,
+                                attachmentUri = msg.attachmentUri,
+                                attachmentName = msg.senderName,
+                                showRegenerate = msg.id == lastAiId && !isGenerating,
+                                onRegenerate = { vm.regenerate() },
+                                onSpeak = { vm.speak(msg.content) }
+                            )
                         }
-                    } else {
-                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(vertical = 4.dp)) {
-                            items(messages) { msg -> 
-                                MessageBubble(text = msg.content, isUser = msg.isUser, isLoading = msg.isLoading, type = msg.type, attachmentUri = msg.attachmentUri, senderName = msg.senderName, onRegenerate = { vm.regenerateResponse(webView) }) 
+                        if (partial != null) {
+                            item(key = "generating") {
+                                if (partial.isEmpty()) {
+                                    Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) { AnimatedLoadingText() }
+                                } else {
+                                    MessageBubble(text = partial, isUser = false, showActions = false)
+                                }
+                            }
+                        }
+                        if (errorText != null) {
+                            item(key = "error") {
+                                ErrorBubble(message = errorText, onRetry = { vm.regenerate() })
                             }
                         }
                     }
-                }
-                
-                if (showAttachmentSheet) {
-                    ModalBottomSheet(onDismissRequest = { showAttachmentSheet = false }, containerColor = CardDark) {
-                        Column(Modifier.padding(16.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { showAttachmentSheet = false; imagePickerLauncher.launch("image/*") }) {
-                                    Icon(Icons.Default.Image, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
-                                    Text("Image", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-                                }
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { showAttachmentSheet = false; filePickerLauncher.launch("*/*") }) {
-                                    Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
-                                    Text("File", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-
-                AndroidView(
-                    factory = { ctx -> WebView(ctx).apply {
-                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        webViewClient = object : WebViewClient() {}
-                        addJavascriptInterface(AiBridge(vm), "AndroidBridge")
-                        val html = """
-                            <html><head><script src='https://js.puter.com/v2/'></script></head><body>
-                            <script>
-                                window.onload = function() { let check = setInterval(() => { if (typeof puter !== 'undefined') { clearInterval(check); AndroidBridge.onReady(); window.fetchModels(); } }, 500); };
-                                window.fetchModels = function() { puter.ai.listModels().then(models => { let result = models.map(m => ({ id: m.id, name: m.name || m.id })); AndroidBridge.onModelsReceived(JSON.stringify(result)); }).catch(e => {}); };
-                                window.generateTitle = function(p) {
-                                    puter.ai.chat("Generate a 2-4 word title for a chat that starts with: " + p + ". Output ONLY the title, no quotes.").then(r => {
-                                        let text = (typeof r === 'string') ? r : (r.message ? r.message.content : "");
-                                        if(text) AndroidBridge.onTitleGenerated(text.trim());
-                                    }).catch(e => {});
-                                };
-                                window.askPuter = function(p, m) {
-                                    let timer = setTimeout(() => { AndroidBridge.onResponse("Error: Timeout."); }, 60000);
-                                    let opts = { stream: false };
-                                    if (m && m !== "") opts.model = m;
-                                    puter.ai.chat(p, opts).then(r => { clearTimeout(timer); let text = (typeof r === 'string') ? r : (r.message ? r.message.content : JSON.stringify(r)); AndroidBridge.onResponse(text); }).catch(e => { clearTimeout(timer); AndroidBridge.onResponse('Error: ' + JSON.stringify(e)); });
-                                };
-                            </script></body></html>
-                        """.trimIndent()
-                        loadDataWithBaseURL("https://appassets.androidplatform.net", html, "text/html", "UTF-8", null)
-                        webView = this
-                    }}, modifier = Modifier.size(1.dp).alpha(0f)
-                )
-
-                if (showLoginView) {
-                    AndroidView(
-                        factory = { ctx -> WebView(ctx).apply {
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            loadUrl("https://puter.com/action/sign-in")
-                            webViewClient = object : WebViewClient() {
-                                override fun onPageFinished(view: WebView?, url: String?) {
-                                    super.onPageFinished(view, url)
-                                    if (url?.contains("dashboard") == true || url?.contains("app") == true) {
-                                        showLoginView = false
-                                        webView?.evaluateJavascript("window.fetchModels();", null)
-                                    }
-                                }
-                            }
-                        }}, modifier = Modifier.fillMaxSize()
-                    )
                 }
             }
         }
+    }
+
+    if (showAttachmentSheet) {
+        ModalBottomSheet(onDismissRequest = { showAttachmentSheet = false }, containerColor = CardDark) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable {
+                        showAttachmentSheet = false
+                        imagePicker.launch("image/*")
+                    }.padding(16.dp)
+                ) {
+                    Icon(Icons.Default.Image, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
+                    Text("Image", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable {
+                        showAttachmentSheet = false
+                        filePicker.launch("*/*")
+                    }.padding(16.dp)
+                ) {
+                    Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
+                    Text("File", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (showModelSheet) {
+        ModelPickerSheet(
+            models = models,
+            selectedId = selectedModel.id,
+            onSelect = {
+                vm.selectModel(it)
+                showModelSheet = false
+            },
+            onRefresh = { vm.refreshModels() },
+            onDismiss = { showModelSheet = false }
+        )
+    }
+
+    val renaming = renameTarget
+    if (renaming != null) {
+        var newTitle by remember(renaming.id) { mutableStateOf(renaming.title) }
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            containerColor = CardDark,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            title = { Text("Rename chat") },
+            text = {
+                OutlinedTextField(
+                    value = newTitle,
+                    onValueChange = { newTitle = it },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.renameChat(renaming.id, newTitle)
+                    renameTarget = null
+                }) { Text("Save", color = AccentBlue) }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) { Text("Cancel", color = TextSecondary) }
+            }
+        )
+    }
+
+    val toDelete = deleteTargets
+    if (toDelete != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTargets = null },
+            containerColor = CardDark,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            title = { Text("Delete chat") },
+            text = { Text("Delete " + toDelete.size + " chat(s)? This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    toDelete.forEach { vm.deleteChat(it) }
+                    vm.isMultiSelectMode = false
+                    vm.selectedChatIds.clear()
+                    deleteTargets = null
+                }) { Text("Delete", color = Color.Red) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTargets = null }) { Text("Cancel", color = TextSecondary) }
+            }
+        )
     }
 }
 -e 
@@ -890,32 +1945,68 @@ package com.hiyako.app.ui.screens
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.util.Base64
-import android.webkit.JavascriptInterface
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hiyako.app.NexusService
-import com.hiyako.app.data.db.*
+import com.hiyako.app.data.db.AppDatabase
+import com.hiyako.app.data.db.ChatEntity
+import com.hiyako.app.data.db.ConversationEntity
+import com.hiyako.app.data.db.MemoryEntity
+import com.hiyako.app.engine.PuterEngine
+import com.hiyako.app.engine.PuterListener
+import com.hiyako.app.util.isRtlText
+import com.hiyako.app.util.queryDisplayName
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
-data class Message(val content: String, val isUser: Boolean, val isLoading: Boolean = false, val type: String = "TEXT", val attachmentUri: String? = null, val senderName: String? = null)
+data class Message(
+    val id: Int,
+    val content: String,
+    val isUser: Boolean,
+    val type: String = "TEXT",
+    val attachmentUri: String? = null,
+    val senderName: String? = null
+)
+
 data class AiModel(val name: String, val id: String)
 
-class AiViewModel(application: Application) : AndroidViewModel(application), TextToSpeech.OnInitListener {
+data class AuthInfo(val signedIn: Boolean, val username: String)
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class AiViewModel(application: Application) :
+    AndroidViewModel(application), TextToSpeech.OnInitListener, PuterListener {
+
+    private val appCtx: Context = application
     private val db = AppDatabase.getDatabase(application)
     private val chatDao = db.chatDao()
     private val conversationDao = db.conversationDao()
@@ -923,189 +2014,555 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
     private val prefs = application.getSharedPreferences("nexus_settings", Context.MODE_PRIVATE)
     private var tts: TextToSpeech? = null
 
-    private val _conversations = MutableStateFlow<List<ConversationEntity>>(emptyList())
-    val conversations = _conversations.asStateFlow()
-    private val _activeConversationId = MutableStateFlow<Int?>(null)
-    val activeConversationId = _activeConversationId.asStateFlow()
-    private val _messages = MutableStateFlow<List<Message>>(emptyList())
-    val messages = _messages.asStateFlow()
-    private val _chatTitle = MutableStateFlow("New Chat")
-    val chatTitle = _chatTitle.asStateFlow()
-    private val _selectedModel = MutableStateFlow(AiModel("Default (Auto)", ""))
-    val selectedModel = _selectedModel.asStateFlow()
-    private val _availableModels = MutableStateFlow<List<AiModel>>(emptyList())
-    val availableModels = _availableModels.asStateFlow()
-    private val _memories = MutableStateFlow<List<MemoryEntity>>(emptyList())
-    val memories = _memories.asStateFlow()
+    private class Pending(val convoId: Int) {
+        private val sb = StringBuilder()
 
-    var isGroupChatMode by mutableStateOf(false)
-    var selectedGroupModels by mutableStateOf<List<AiModel>>(emptyList())
+        @Volatile
+        var lastActivity: Long = System.currentTimeMillis()
+
+        @Synchronized
+        fun append(t: String): String {
+            sb.append(t)
+            lastActivity = System.currentTimeMillis()
+            return sb.toString()
+        }
+
+        @Synchronized
+        fun text(): String = sb.toString()
+    }
+
+    private class SavedAttachment(val file: File, val mime: String, val name: String)
+    private class BuiltRequest(val messagesJson: String, val imageDataUrl: String?)
+
+    private val pending = ConcurrentHashMap<String, Pending>()
+    private val pendingImages = ConcurrentHashMap<String, String>()
+    private val titleFallbacks = ConcurrentHashMap<Int, String>()
+    private var requestCounter = 0L
+
+    private val _conversations = MutableStateFlow<List<ConversationEntity>>(emptyList())
+    val conversations: StateFlow<List<ConversationEntity>> = _conversations.asStateFlow()
+
+    private val _activeConversationId = MutableStateFlow<Int?>(null)
+    val activeConversationId: StateFlow<Int?> = _activeConversationId.asStateFlow()
+
+    val messages: StateFlow<List<Message>> = _activeConversationId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(emptyList<ChatEntity>()) else chatDao.getMessagesForChat(id)
+        }
+        .map { list ->
+            list.filterNot { it.role == "ai" && it.content == "Thinking..." }
+                .map { e ->
+                    Message(
+                        id = e.id,
+                        content = e.content,
+                        isUser = e.role == "user",
+                        type = e.messageType,
+                        attachmentUri = e.attachmentUri,
+                        senderName = e.senderName
+                    )
+                }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val chatTitle: StateFlow<String> = combine(_conversations, _activeConversationId) { convos, id ->
+        convos.firstOrNull { it.id == id }?.title ?: DEFAULT_TITLE
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_TITLE)
+
+    // conversationId -> text streamed so far ("" means waiting for the first token)
+    private val _generating = MutableStateFlow<Map<Int, String>>(emptyMap())
+    val generating: StateFlow<Map<Int, String>> = _generating.asStateFlow()
+
+    private val _errors = MutableStateFlow<Map<Int, String>>(emptyMap())
+    val errors: StateFlow<Map<Int, String>> = _errors.asStateFlow()
+
+    private val _selectedModel = MutableStateFlow(
+        AiModel(
+            prefs.getString("model_name", "Default (Auto)") ?: "Default (Auto)",
+            prefs.getString("model_id", "") ?: ""
+        )
+    )
+    val selectedModel: StateFlow<AiModel> = _selectedModel.asStateFlow()
+
+    private val _availableModels = MutableStateFlow<List<AiModel>>(emptyList())
+    val availableModels: StateFlow<List<AiModel>> = _availableModels.asStateFlow()
+
+    private val _memories = MutableStateFlow<List<MemoryEntity>>(emptyList())
+    val memories: StateFlow<List<MemoryEntity>> = _memories.asStateFlow()
+
+    private val _auth = MutableStateFlow(AuthInfo(false, ""))
+    val auth: StateFlow<AuthInfo> = _auth.asStateFlow()
+
     var isMultiSelectMode by mutableStateOf(false)
-    val selectedChatIds = androidx.compose.runtime.mutableStateListOf<Int>()
+    val selectedChatIds = mutableStateListOf<Int>()
     var isThinkingMode by mutableStateOf(false)
     var isSearchMode by mutableStateOf(false)
     var themeMode by mutableStateOf(prefs.getString("theme", "Dark") ?: "Dark")
     var fontSize by mutableStateOf(prefs.getFloat("fontSize", 1f))
 
+    private val engineHolder = lazy { PuterEngine(appCtx, this) }
+    val engine: PuterEngine get() = engineHolder.value
+
     init {
         tts = TextToSpeech(application, this)
+
         viewModelScope.launch {
-            conversationDao.getAllConversations().collectLatest { convos ->
+            conversationDao.getAllConversations().collect { convos ->
                 _conversations.value = convos
-                if (convos.isEmpty() && _activeConversationId.value == null) {
-                    _activeConversationId.value = conversationDao.insertConversation(ConversationEntity(title = "New Chat")).toInt()
-                } else if (_activeConversationId.value == null) { _activeConversationId.value = convos.first().id }
+                val active = _activeConversationId.value
+                if (convos.isEmpty()) {
+                    val newId = conversationDao.insertConversation(ConversationEntity(title = DEFAULT_TITLE)).toInt()
+                    _activeConversationId.value = newId
+                } else if (active == null || convos.none { it.id == active }) {
+                    _activeConversationId.value = convos.first().id
+                }
             }
         }
-        viewModelScope.launch { memoryDao.getAllMemories().collectLatest { _memories.value = it } }
+
         viewModelScope.launch {
-            _activeConversationId.collectLatest { id ->
-                if (id != null) {
-                    conversationDao.getAllConversations().collectLatest { convos ->
-                        val currentConvo = convos.find { it.id == id }
-                        _chatTitle.value = currentConvo?.title ?: "New Chat"
-                        isGroupChatMode = currentConvo?.isGroup ?: false
+            memoryDao.getAllMemories().collectLatest { _memories.value = it }
+        }
+
+        // Watchdog: fail requests that stopped producing output.
+        viewModelScope.launch {
+            while (true) {
+                delay(5000)
+                val now = System.currentTimeMillis()
+                pending.entries.toList().forEach { entry ->
+                    if (now - entry.value.lastActivity > REQUEST_TIMEOUT_MS) {
+                        failRequest(entry.key, "The model stopped responding (timeout).")
                     }
-                    chatDao.getMessagesForChat(id).collectLatest { entities ->
-                        _messages.value = entities.map { entity -> Message(entity.content, entity.role == "user", isLoading = entity.content == "Thinking...", type = entity.messageType, attachmentUri = entity.attachmentUri, senderName = entity.senderName) }
-                    }
-                } else { _messages.value = emptyList() }
+                }
             }
         }
     }
 
+    // ------------------------------------------------------------------ TTS
+
     override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) tts?.language = Locale.US
+        if (status == TextToSpeech.SUCCESS) tts?.language = Locale.getDefault()
     }
 
     fun speak(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "")
+        val clean = text
+            .replace(Regex("```[\\s\\S]*?```"), " ")
+            .replace("*", "")
+            .replace("#", "")
+            .replace("`", "")
+            .trim()
+            .take(3500)
+        if (clean.isEmpty()) return
+        tts?.language = if (isRtlText(clean)) Locale("ar") else Locale.getDefault()
+        tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "nexus_tts")
     }
 
-    fun setReady() { }
-    fun selectModel(model: AiModel) { _selectedModel.value = model }
+    // ------------------------------------------------------------------ Simple state
+
     fun toggleThink() { isThinkingMode = !isThinkingMode }
     fun toggleSearch() { isSearchMode = !isSearchMode }
-    
-    fun createNewConversation(isGroup: Boolean = false) { 
-        viewModelScope.launch { _activeConversationId.value = conversationDao.insertConversation(ConversationEntity(title = if(isGroup) "New Group" else "New Chat", isGroup = isGroup)).toInt() } 
-    }
-    
-    fun selectConversation(id: Int) { _activeConversationId.value = id }
-    fun deleteChat(id: Int) { viewModelScope.launch { conversationDao.deleteConversation(id); if (_activeConversationId.value == id) _activeConversationId.value = null } }
-    fun renameChat(id: Int, newTitle: String) { viewModelScope.launch { conversationDao.updateTitle(id, newTitle) } }
-    fun togglePin(id: Int, isPinned: Boolean) { viewModelScope.launch { conversationDao.updatePin(id, isPinned) } }
-    fun clearAllChats() { viewModelScope.launch { chatDao.clearAllMessages(); conversationDao.deleteAllConversations(); _activeConversationId.value = null } }
-    fun addMemory(content: String) { viewModelScope.launch { memoryDao.insertMemory(MemoryEntity(content = content)) } }
-    fun clearMemories() { viewModelScope.launch { memoryDao.clearMemories() } }
-    fun updateTheme(mode: String) { themeMode = mode; prefs.edit().putString("theme", mode).apply() }
-    fun updateFontSize(size: Float) { fontSize = size; prefs.edit().putFloat("fontSize", size).apply() }
 
-    fun onModelsReceived(jsonString: String) {
+    fun selectModel(model: AiModel) {
+        _selectedModel.value = model
+        prefs.edit().putString("model_id", model.id).putString("model_name", model.name).apply()
+    }
+
+    fun updateTheme(mode: String) {
+        themeMode = mode
+        prefs.edit().putString("theme", mode).apply()
+    }
+
+    fun updateFontSize(size: Float) {
+        fontSize = size
+        prefs.edit().putFloat("fontSize", size).apply()
+    }
+
+    fun addMemory(content: String) {
+        viewModelScope.launch { memoryDao.insertMemory(MemoryEntity(content = content)) }
+    }
+
+    fun clearMemories() {
+        viewModelScope.launch { memoryDao.clearMemories() }
+    }
+
+    fun canSend(): Boolean = engine.ready.value
+
+    fun refreshModels() = engine.refreshModels()
+
+    fun signIn() = engine.signIn()
+
+    // ------------------------------------------------------------------ Conversations
+
+    fun createNewConversation() {
+        val active = _activeConversationId.value
+        if (active != null && messages.value.isEmpty() && !_generating.value.containsKey(active)) return
+        viewModelScope.launch {
+            _activeConversationId.value =
+                conversationDao.insertConversation(ConversationEntity(title = DEFAULT_TITLE)).toInt()
+        }
+    }
+
+    fun selectConversation(id: Int) {
+        _activeConversationId.value = id
+    }
+
+    fun deleteChat(id: Int) {
+        cancelRequestsFor(id)
+        viewModelScope.launch {
+            chatDao.clearChat(id)
+            conversationDao.deleteConversation(id)
+        }
+    }
+
+    fun renameChat(id: Int, newTitle: String) {
+        val clean = newTitle.trim()
+        if (clean.isEmpty()) return
+        viewModelScope.launch { conversationDao.updateTitle(id, clean) }
+    }
+
+    fun togglePin(id: Int, isPinned: Boolean) {
+        viewModelScope.launch { conversationDao.updatePin(id, isPinned) }
+    }
+
+    fun clearAllChats() {
+        _conversations.value.forEach { cancelRequestsFor(it.id) }
+        viewModelScope.launch {
+            chatDao.clearAllMessages()
+            conversationDao.deleteAllConversations()
+            withContext(Dispatchers.IO) { File(appCtx.filesDir, "attachments").deleteRecursively() }
+        }
+    }
+
+    private fun cancelRequestsFor(convoId: Int) {
+        pending.entries.toList().forEach { entry ->
+            if (entry.value.convoId == convoId) {
+                pending.remove(entry.key)
+                pendingImages.remove(entry.key)
+            }
+        }
+        _generating.update { it - convoId }
+        _errors.update { it - convoId }
+        stopServiceIfIdle()
+    }
+
+    // ------------------------------------------------------------------ Sending
+
+    private fun markGenerating(convoId: Int): Boolean {
+        if (_generating.value.containsKey(convoId)) return false
+        _generating.update { it + (convoId to "") }
+        _errors.update { it - convoId }
+        return true
+    }
+
+    fun sendMessage(text: String, attachmentUri: Uri?) {
+        val convoId = _activeConversationId.value ?: return
+        val trimmed = text.trim()
+        if (trimmed.isEmpty() && attachmentUri == null) return
+        if (!markGenerating(convoId)) return
+
+        val currentTitle = _conversations.value.firstOrNull { it.id == convoId }?.title
+        val needsTitle = currentTitle == null || currentTitle == DEFAULT_TITLE || currentTitle == "New Group"
+
+        viewModelScope.launch {
+            try {
+                var type = "TEXT"
+                var storedUri: String? = null
+                var displayName: String? = null
+                if (attachmentUri != null) {
+                    val saved = withContext(Dispatchers.IO) { copyAttachment(attachmentUri) }
+                    type = if (saved.mime.startsWith("image/")) "IMAGE" else "FILE"
+                    storedUri = Uri.fromFile(saved.file).toString()
+                    displayName = saved.name
+                }
+                chatDao.insertMessage(
+                    ChatEntity(
+                        conversationId = convoId,
+                        role = "user",
+                        content = trimmed,
+                        messageType = type,
+                        attachmentUri = storedUri,
+                        senderName = displayName
+                    )
+                )
+                conversationDao.touch(convoId, System.currentTimeMillis())
+
+                if (needsTitle) {
+                    val seed = if (trimmed.isNotEmpty()) trimmed else (displayName ?: "Attachment")
+                    val fallback = seed.lines().first().trim().take(32).ifBlank { DEFAULT_TITLE }
+                    titleFallbacks[convoId] = fallback
+                    conversationDao.updateTitle(convoId, fallback)
+                    engine.makeTitle(convoId, seed)
+                }
+            } catch (e: Exception) {
+                _generating.update { it - convoId }
+                _errors.update { it + (convoId to ("Could not attach the file: " + (e.message ?: "unknown error"))) }
+                return@launch
+            }
+            runRequest(convoId)
+        }
+    }
+
+    fun regenerate() {
+        val convoId = _activeConversationId.value ?: return
+        if (!markGenerating(convoId)) return
+        viewModelScope.launch {
+            try {
+                val last = chatDao.getMessagesOnce(convoId).lastOrNull()
+                if (last != null && last.role != "user") chatDao.deleteMessage(last.id)
+            } catch (e: Exception) {
+                _generating.update { it - convoId }
+                return@launch
+            }
+            runRequest(convoId)
+        }
+    }
+
+    fun stopGeneration() {
+        val convoId = _activeConversationId.value ?: return
+        val partials = mutableListOf<String>()
+        pending.entries.toList().forEach { entry ->
+            if (entry.value.convoId == convoId) {
+                pending.remove(entry.key)
+                pendingImages.remove(entry.key)
+                partials.add(entry.value.text())
+            }
+        }
+        val partial = partials.joinToString("").trim()
+        viewModelScope.launch {
+            if (partial.isNotEmpty()) {
+                chatDao.insertMessage(ChatEntity(conversationId = convoId, role = "ai", content = partial))
+            }
+            _generating.update { it - convoId }
+            stopServiceIfIdle()
+        }
+    }
+
+    private suspend fun runRequest(convoId: Int) {
+        requestCounter += 1
+        val reqId = "r$requestCounter"
+        pending[reqId] = Pending(convoId)
+        startServiceSafely()
         try {
-            val jsonArray = JSONArray(jsonString)
-            val modelsList = mutableListOf<AiModel>()
-            modelsList.add(AiModel("Default (Auto)", ""))
-            for (i in 0 until jsonArray.length()) {
-                val id = jsonArray.getJSONObject(i).optString("id")
-                if (id.isNotBlank()) modelsList.add(AiModel(jsonArray.getJSONObject(i).optString("name", id), id))
-            }
-            _availableModels.value = modelsList.sortedBy { it.name }
-        } catch (e: Exception) { e.printStackTrace() }
+            val entities = chatDao.getMessagesOnce(convoId)
+            val built = withContext(Dispatchers.IO) { buildRequest(entities) }
+            if (!pending.containsKey(reqId)) return
+            val image = built.imageDataUrl
+            if (image != null) pendingImages[reqId] = image
+            engine.ask(reqId, built.messagesJson, _selectedModel.value.id, image != null)
+        } catch (e: Exception) {
+            failRequest(reqId, e.message ?: "Unexpected error")
+        }
     }
 
-    fun sendMessage(text: String, attachmentUri: Uri?, attachmentType: String?, webView: android.webkit.WebView?) {
-        val currentId = _activeConversationId.value ?: return
-        if (text.isBlank() && attachmentUri == null) return
+    private fun buildRequest(entities: List<ChatEntity>): BuiltRequest {
+        val system = StringBuilder()
+        system.append("You are Nexus AI, a helpful assistant. Reply in the same language as the user's last message. ")
+        system.append("Use Markdown for formatting and fenced code blocks for code.")
 
-        if (_messages.value.isEmpty()) webView?.evaluateJavascript("window.generateTitle(\"${text.take(50).replace("\"", "\\\"")}\");", null)
+        val mem = _memories.value.take(20)
+        if (mem.isNotEmpty()) {
+            system.append("\n\nKnown facts about the user:\n")
+            mem.forEach { system.append("- ").append(it.content.take(300)).append('\n') }
+        }
+        if (isThinkingMode) {
+            system.append("\n\nThink through the problem carefully and step by step before giving the final answer.")
+        }
+        if (isSearchMode) {
+            system.append("\n\nThe user turned on Search mode, but you cannot browse the web in this app. ")
+            system.append("If the answer depends on recent information, say so clearly instead of guessing.")
+        }
 
-        ContextCompat.startForegroundService(getApplication(), Intent(getApplication(), NexusService::class.java))
+        val arr = JSONArray()
+        arr.put(JSONObject().put("role", "system").put("content", system.toString()))
 
-        viewModelScope.launch {
-            var finalText = text
-            var finalType = "TEXT"
-            if (attachmentUri != null) {
-                if (attachmentType?.startsWith("image/") == true) {
-                    finalType = "IMAGE"
-                    val base64Image = encodeImageToBase64(attachmentUri)
-                    finalText = "[IMAGE_BASE64:$base64Image] $text"
-                } else { finalType = "FILE"; finalText = "File Attached: $text" }
+        val recent = entities
+            .filterNot { it.role == "ai" && it.content == "Thinking..." }
+            .takeLast(MAX_HISTORY)
+
+        for (e in recent) {
+            val role = if (e.role == "user") "user" else "assistant"
+            var content = e.content.take(12000)
+            if (role == "user" && e.messageType == "FILE") {
+                val name = e.senderName ?: "file"
+                val fileText = readTextAttachment(e.attachmentUri)
+                content += if (fileText != null) {
+                    "\n\n[Attached file: $name]\n```\n$fileText\n```"
+                } else {
+                    "\n\n[Attached file: $name - this file type cannot be read in this version of the app]"
+                }
             }
+            arr.put(JSONObject().put("role", role).put("content", content))
+        }
 
-            chatDao.insertMessage(ChatEntity(conversationId = currentId, role = "user", content = text, messageType = finalType, attachmentUri = attachmentUri.toString()))
-            chatDao.insertMessage(ChatEntity(conversationId = currentId, role = "ai", content = "Thinking...", messageType = "TEXT")) 
-            
-            val memoryPrompt = if (_memories.value.isNotEmpty()) "User Memories:\n" + _memories.value.joinToString("\n") { "- ${it.content}" } + "\n\n" else ""
-            var finalPrompt = memoryPrompt + finalText
-            if (isThinkingMode) finalPrompt = "Think step by step before answering.\n$finalPrompt"
-            if (isSearchMode) finalPrompt = "Use web search if needed.\n$finalPrompt"
-            
-            if (isGroupChatMode && selectedGroupModels.isNotEmpty()) {
-                val firstModel = selectedGroupModels.first().id
-                val js = "window.askPuter(\"${finalPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"$firstModel\");"
-                webView?.evaluateJavascript(js, null)
-            } else {
-                val js = "window.askPuter(\"${finalPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
-                webView?.evaluateJavascript(js, null)
+        var imageDataUrl: String? = null
+        val last = recent.lastOrNull()
+        if (last != null && last.role == "user" && last.messageType == "IMAGE") {
+            val path = last.attachmentUri?.let { Uri.parse(it).path }
+            if (path != null) imageDataUrl = imageToDataUrl(File(path))
+            if (imageDataUrl != null && last.content.isBlank()) {
+                arr.remove(arr.length() - 1)
+                arr.put(JSONObject().put("role", "user").put("content", "Describe this image in detail."))
+            }
+        }
+        return BuiltRequest(arr.toString(), imageDataUrl)
+    }
+
+    private fun copyAttachment(uri: Uri): SavedAttachment {
+        val name = queryDisplayName(appCtx, uri)
+        val mime = appCtx.contentResolver.getType(uri) ?: "application/octet-stream"
+        val dir = File(appCtx.filesDir, "attachments")
+        dir.mkdirs()
+        val safe = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val out = File(dir, System.currentTimeMillis().toString() + "_" + safe)
+        val input = appCtx.contentResolver.openInputStream(uri) ?: throw IllegalStateException("Cannot open the selected file")
+        input.use { src -> out.outputStream().use { dst -> src.copyTo(dst) } }
+        return SavedAttachment(out, mime, name)
+    }
+
+    private fun readTextAttachment(uriString: String?): String? {
+        if (uriString == null) return null
+        val path = Uri.parse(uriString).path ?: return null
+        val file = File(path)
+        if (!file.exists() || file.length() > 5_000_000L) return null
+        val bytes = file.readBytes()
+        for (b in bytes) {
+            if (b.toInt() == 0) return null
+        }
+        return String(bytes, Charsets.UTF_8).take(40000)
+    }
+
+    private fun imageToDataUrl(file: File): String? {
+        if (!file.exists()) return null
+        val bounds = BitmapFactory.Options()
+        bounds.inJustDecodeBounds = true
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        var sample = 1
+        while (bounds.outWidth / sample > 1600 || bounds.outHeight / sample > 1600) sample *= 2
+        val opts = BitmapFactory.Options()
+        opts.inSampleSize = sample
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath, opts) ?: return null
+        val out = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        bitmap.recycle()
+        return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }
+
+    // ------------------------------------------------------------------ Foreground service
+
+    private fun startServiceSafely() {
+        try {
+            ContextCompat.startForegroundService(appCtx, Intent(appCtx, NexusService::class.java))
+        } catch (e: Exception) {
+            // The service only keeps the process alive in the background; chat works without it.
+        }
+    }
+
+    private fun stopServiceIfIdle() {
+        viewModelScope.launch {
+            delay(1500)
+            if (pending.isEmpty()) {
+                try {
+                    appCtx.stopService(Intent(appCtx, NexusService::class.java))
+                } catch (e: Exception) {
+                    // ignore
+                }
             }
         }
     }
 
-    fun regenerateResponse(webView: android.webkit.WebView?) {
-        val currentId = _activeConversationId.value ?: return
-        val lastUserMsg = _messages.value.lastOrNull { it.isUser }?.content ?: return
-        viewModelScope.launch {
-            chatDao.deleteThinkingMessage(currentId)
-            chatDao.insertMessage(ChatEntity(conversationId = currentId, role = "ai", content = "Thinking...", messageType = "TEXT"))
-        }
-        var finalPrompt = lastUserMsg
-        if (isThinkingMode) finalPrompt = "Think step by step before answering.\n$lastUserMsg"
-        val js = "window.askPuter(\"${finalPrompt.replace("\"", "\\\"").replace("\n", "\\n")}\", \"${_selectedModel.value.id}\");"
-        webView?.evaluateJavascript(js, null)
-    }
+    private suspend fun conversationExists(id: Int): Boolean = _conversations.value.any { it.id == id }
 
-    fun onTitleGenerated(title: String) {
-        val currentId = _activeConversationId.value ?: return
-        if (title.isNotBlank()) viewModelScope.launch { conversationDao.updateTitle(currentId, title) }
-    }
-
-    fun onResponse(res: String) {
-        val currentId = _activeConversationId.value ?: return
-        getApplication<Application>().stopService(Intent(getApplication(), NexusService::class.java))
+    private fun failRequest(reqId: String, message: String) {
+        val p = pending.remove(reqId) ?: return
+        pendingImages.remove(reqId)
+        val partial = p.text().trim()
         viewModelScope.launch {
-            chatDao.deleteThinkingMessage(currentId)
-            if (res.contains("[GENERATE_FILE:")) {
-                val fileName = res.substringAfter("[GENERATE_FILE:").substringBefore("]")
-                val content = res.substringAfter("]").trim()
-                createLocalFile(fileName, content)
-                chatDao.insertMessage(ChatEntity(conversationId = currentId, role = "ai", content = "تم إنشاء الملف: $fileName", messageType = "TEXT"))
-            } else {
-                chatDao.insertMessage(ChatEntity(conversationId = currentId, role = "ai", content = res, messageType = "TEXT"))
+            if (partial.isNotEmpty() && conversationExists(p.convoId)) {
+                chatDao.insertMessage(ChatEntity(conversationId = p.convoId, role = "ai", content = partial))
             }
+            _errors.update { it + (p.convoId to message) }
+            _generating.update { it - p.convoId }
+            stopServiceIfIdle()
         }
     }
 
-    private fun createLocalFile(fileName: String, content: String) {
-        val dir = getApplication<Application>().getExternalFilesDir(null)
-        val file = File(dir, fileName)
-        file.writeText(content)
+    // ------------------------------------------------------------------ PuterListener (called from the WebView bridge thread)
+
+    override fun onEngineReady() {}
+
+    override fun onModelsReceived(json: String) {
+        try {
+            val arr = JSONArray(json)
+            val list = mutableListOf<AiModel>()
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val id = o.optString("id")
+                if (id.isNotBlank()) {
+                    val name = o.optString("name", id).ifBlank { id }
+                    list.add(AiModel(name, id))
+                }
+            }
+            val sorted = list.distinctBy { it.id }.sortedBy { it.name.lowercase() }
+            _availableModels.value = listOf(AiModel("Default (Auto)", "")) + sorted
+        } catch (e: Exception) {
+            // ignore malformed payload
+        }
     }
 
-    private suspend fun encodeImageToBase64(uri: Uri): String = withContext(Dispatchers.IO) {
-        val inputStream = getApplication<Application>().contentResolver.openInputStream(uri)
-        val bytes = inputStream?.readBytes() ?: ByteArray(0)
-        Base64.encodeToString(bytes, Base64.NO_WRAP)
+    override fun onChunk(reqId: String, text: String) {
+        val p = pending[reqId] ?: return
+        val snapshot = p.append(text)
+        _generating.update { it + (p.convoId to snapshot) }
     }
 
-    override fun onCleared() { tts?.shutdown(); super.onCleared() }
-}
+    override fun onDone(reqId: String) {
+        val p = pending.remove(reqId) ?: return
+        pendingImages.remove(reqId)
+        val finalText = p.text().trim()
+        viewModelScope.launch {
+            if (conversationExists(p.convoId)) {
+                if (finalText.isNotEmpty()) {
+                    chatDao.insertMessage(ChatEntity(conversationId = p.convoId, role = "ai", content = finalText))
+                    conversationDao.touch(p.convoId, System.currentTimeMillis())
+                } else {
+                    _errors.update { it + (p.convoId to "The model returned an empty reply.") }
+                }
+            }
+            _generating.update { it - p.convoId }
+            stopServiceIfIdle()
+        }
+    }
 
-class AiBridge(private val vm: AiViewModel) {
-    @JavascriptInterface fun onReady() { vm.setReady() }
-    @JavascriptInterface fun onResponse(res: String) { vm.onResponse(res) }
-    @JavascriptInterface fun onModelsReceived(json: String) { vm.onModelsReceived(json) }
-    @JavascriptInterface fun onTitleGenerated(title: String) { vm.onTitleGenerated(title) }
+    override fun onError(reqId: String, message: String) {
+        failRequest(reqId, message)
+    }
+
+    override fun onTitle(convoId: Int, title: String) {
+        val clean = title.trim().trim('"', '\'', '«', '»').trim().take(60)
+        if (clean.isEmpty()) return
+        val fallback = titleFallbacks[convoId] ?: return
+        val current = _conversations.value.firstOrNull { it.id == convoId }?.title
+        if (current == fallback) {
+            titleFallbacks.remove(convoId)
+            viewModelScope.launch { conversationDao.updateTitle(convoId, clean) }
+        }
+    }
+
+    override fun onAuth(signedIn: Boolean, username: String) {
+        _auth.value = AuthInfo(signedIn, username)
+    }
+
+    override fun provideImage(reqId: String): String = pendingImages[reqId] ?: ""
+
+    override fun onCleared() {
+        tts?.shutdown()
+        if (engineHolder.isInitialized()) engine.destroy()
+        super.onCleared()
+    }
+
+    companion object {
+        private const val DEFAULT_TITLE = "New Chat"
+        private const val REQUEST_TIMEOUT_MS = 120_000L
+        private const val MAX_HISTORY = 30
+    }
 }
 -e 
 
@@ -1399,56 +2856,168 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.*
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.hiyako.app.ui.screens.*
-import com.hiyako.app.ui.theme.AppTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hiyako.app.ui.screens.AiViewModel
+import com.hiyako.app.ui.screens.ChatScreen
+import com.hiyako.app.ui.screens.MemoryScreen
+import com.hiyako.app.ui.screens.SettingsScreen
+import com.hiyako.app.ui.screens.UpdaterScreen
+import com.hiyako.app.ui.screens.WorkspaceScreen
+import com.hiyako.app.ui.theme.AppTheme
+import com.hiyako.app.ui.theme.OledBlack
+import com.hiyako.app.ui.theme.TextPrimary
 
 class MainActivity : ComponentActivity() {
+
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                registerForActivityResult(ActivityResultContracts.RequestPermission()) { }.launch(Manifest.permission.POST_NOTIFICATIONS)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            registerForActivityResult(ActivityResultContracts.RequestPermission()) { }.launch(Manifest.permission.RECORD_AUDIO)
         }
 
         setContent {
             val aiViewModel: AiViewModel = viewModel()
-            val darkTheme = when(aiViewModel.themeMode) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }
-            val fontScale = aiViewModel.fontSize
+            val darkTheme = when (aiViewModel.themeMode) {
+                "Light" -> false
+                "Dark" -> true
+                else -> isSystemInDarkTheme()
+            }
             val density = LocalDensity.current
 
-            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+            CompositionLocalProvider(LocalDensity provides Density(density.density, aiViewModel.fontSize)) {
                 AppTheme(darkTheme = darkTheme) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        var screenState by remember { mutableStateOf("chat") }
-                        var refreshChatTrigger by remember { mutableIntStateOf(0) }
-                        
-                        when (screenState) {
-                            "workspace" -> WorkspaceScreen(onBack = { screenState = "settings" }, onRepoSelected = { screenState = "chat"; refreshChatTrigger++ }, onNavigateToUpdater = { screenState = "updater" })
-                            "updater" -> UpdaterScreen(onBack = { screenState = "settings" })
-                            "memory" -> MemoryScreen(onBack = { screenState = "settings" }, vm = aiViewModel)
-                            "settings" -> SettingsScreen(onBack = { screenState = "chat" }, onNavigateToWorkspace = { screenState = "workspace" }, onNavigateToUpdater = { screenState = "updater" }, onNavigateToMemory = { screenState = "memory" }, onSignIn = { screenState = "chat" }, onClearChat = { aiViewModel.clearAllChats() }, vm = aiViewModel)
-                            else -> key(refreshChatTrigger) { ChatScreen(onNavigateToSettings = { screenState = "settings" }, vm = aiViewModel) }
-                        }
+                        AppRoot(aiViewModel)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AppRoot(vm: AiViewModel) {
+    var screenState by remember { mutableStateOf("chat") }
+    var showEngineHost by remember { mutableStateOf(false) }
+
+    // Create the hidden Puter WebView only after the first frame so app start-up is not delayed.
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        showEngineHost = true
+    }
+
+    BackHandler(enabled = screenState != "chat") {
+        screenState = if (screenState == "settings") "chat" else "settings"
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        when (screenState) {
+            "workspace" -> WorkspaceScreen(
+                onBack = { screenState = "settings" },
+                onRepoSelected = { screenState = "chat" },
+                onNavigateToUpdater = { screenState = "updater" }
+            )
+            "updater" -> UpdaterScreen(onBack = { screenState = "settings" })
+            "memory" -> MemoryScreen(onBack = { screenState = "settings" }, vm = vm)
+            "settings" -> SettingsScreen(
+                onBack = { screenState = "chat" },
+                onNavigateToWorkspace = { screenState = "workspace" },
+                onNavigateToUpdater = { screenState = "updater" },
+                onNavigateToMemory = { screenState = "memory" },
+                onSignIn = {
+                    vm.signIn()
+                    screenState = "chat"
+                },
+                onClearChat = { vm.clearAllChats() },
+                vm = vm
+            )
+            else -> ChatScreen(onNavigateToSettings = { screenState = "settings" }, vm = vm)
+        }
+
+        if (showEngineHost) {
+            EngineHost(vm)
+        }
+    }
+}
+
+/**
+ * Keeps the hidden Puter WebView attached for the whole app lifetime, and shows
+ * Puter's sign-in popup window on top of everything when it asks for one.
+ */
+@Composable
+private fun EngineHost(vm: AiViewModel) {
+    val engine = vm.engine
+    val popup by engine.popup.collectAsState()
+
+    AndroidView(
+        factory = { engine.webView },
+        modifier = Modifier.size(1.dp).alpha(0f)
+    )
+
+    BackHandler(enabled = popup != null) { engine.closePopup() }
+
+    val popupView = popup
+    if (popupView != null) {
+        Column(Modifier.fillMaxSize().background(OledBlack)) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { engine.closePopup() }) {
+                    Icon(Icons.Default.Close, "Close", tint = TextPrimary)
+                }
+                Text("Puter sign-in", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+            AndroidView(
+                factory = { popupView },
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
         }
     }
 }
@@ -1618,7 +3187,7 @@ data class ChatEntity(
     val content: String,
     val messageType: String = "TEXT", // "TEXT", "IMAGE", "FILE", "AUDIO", "VIDEO"
     val attachmentUri: String? = null,
-    val senderName: String? = null, // اسم النموذج في القروب
+    val senderName: String? = null, // اسم النموذج في القروب / اسم الملف المرفق
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -1631,18 +3200,24 @@ data class MemoryEntity(
 
 @Dao
 interface ChatDao {
-    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId ORDER BY timestamp ASC")
+    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC")
     fun getMessagesForChat(conversationId: Int): Flow<List<ChatEntity>>
+
+    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC")
+    suspend fun getMessagesOnce(conversationId: Int): List<ChatEntity>
 
     @Insert
     suspend fun insertMessage(message: ChatEntity)
+
+    @Query("DELETE FROM chat_messages WHERE id = :messageId")
+    suspend fun deleteMessage(messageId: Int)
 
     @Query("DELETE FROM chat_messages WHERE role = 'ai' AND content = 'Thinking...' AND conversationId = :conversationId")
     suspend fun deleteThinkingMessage(conversationId: Int)
 
     @Query("DELETE FROM chat_messages WHERE conversationId = :conversationId")
     suspend fun clearChat(conversationId: Int)
-    
+
     @Query("DELETE FROM chat_messages")
     suspend fun clearAllMessages()
 }
@@ -1657,13 +3232,16 @@ interface ConversationDao {
 
     @Query("UPDATE conversations SET title = :newTitle WHERE id = :conversationId")
     suspend fun updateTitle(conversationId: Int, newTitle: String)
-    
+
     @Query("UPDATE conversations SET isPinned = :isPinned WHERE id = :conversationId")
     suspend fun updatePin(conversationId: Int, isPinned: Boolean)
 
+    @Query("UPDATE conversations SET timestamp = :timestamp WHERE id = :conversationId")
+    suspend fun touch(conversationId: Int, timestamp: Long)
+
     @Query("DELETE FROM conversations WHERE id = :conversationId")
     suspend fun deleteConversation(conversationId: Int)
-    
+
     @Query("DELETE FROM conversations")
     suspend fun deleteAllConversations()
 }
@@ -1672,8 +3250,10 @@ interface ConversationDao {
 interface MemoryDao {
     @Query("SELECT * FROM memories ORDER BY timestamp DESC")
     fun getAllMemories(): Flow<List<MemoryEntity>>
+
     @Insert
     suspend fun insertMemory(memory: MemoryEntity)
+
     @Query("DELETE FROM memories")
     suspend fun clearMemories()
 }
@@ -1705,27 +3285,74 @@ abstract class AppDatabase : RoomDatabase() {
 
 
 ========================================
+FILE: ./app/src/main/java/com/hiyako/app/util/Utils.kt
+========================================
+package com.hiyako.app.util
+
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+
+fun queryDisplayName(context: Context, uri: Uri): String {
+    var name: String? = null
+    try {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) name = cursor.getString(index)
+            }
+        }
+    } catch (e: Exception) {
+        // ignore and fall back below
+    }
+    return name ?: uri.lastPathSegment ?: "file"
+}
+
+fun isRtlText(text: String): Boolean {
+    for (ch in text) {
+        if (Character.isLetter(ch)) {
+            val direction = Character.getDirectionality(ch)
+            return direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT ||
+                direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC
+        }
+    }
+    return false
+}
+-e 
+
+
+========================================
 FILE: ./app/src/main/AndroidManifest.xml
 ========================================
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" /> 
- <uses-permission android:name="android.permission.INTERNET" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <application android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Nexus AI" android:supportsRtl="true" android:theme="@android:style/Theme.Material.NoActionBar" android:windowSoftInputMode="adjustResize" android:usesCleartextTraffic="true">
-        <activity android:name=".MainActivity" android:exported="true" android:theme="@android:style/Theme.Material.NoActionBar" android:windowSoftInputMode="adjustResize">
+
+    <application
+        android:allowBackup="false"
+        android:icon="@drawable/ic_launcher"
+        android:label="Nexus AI"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Hiyako">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|uiMode|density|fontScale|layoutDirection|locale"
+            android:theme="@style/Theme.Hiyako"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-    
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
@@ -1735,7 +3362,11 @@ FILE: ./app/src/main/AndroidManifest.xml
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-    <service android:name=".NexusService" android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".NexusService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>
 -e 

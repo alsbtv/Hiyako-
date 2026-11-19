@@ -20,10 +20,15 @@ import com.hiyako.app.data.db.AppDatabase
 import com.hiyako.app.data.db.ChatEntity
 import com.hiyako.app.data.db.ConversationEntity
 import com.hiyako.app.data.db.MemoryEntity
+import com.hiyako.app.data.db.ReportEntity
 import com.hiyako.app.engine.PuterEngine
 import com.hiyako.app.engine.PuterListener
 import com.hiyako.app.util.isRtlText
 import com.hiyako.app.util.queryDisplayName
+import com.hiyako.app.providers.AccountStore
+import com.hiyako.app.providers.OpenAiCompatClient
+import com.hiyako.app.providers.ProviderCatalog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -56,7 +61,7 @@ data class Message(
     val senderName: String? = null
 )
 
-data class AiModel(val name: String, val id: String)
+data class AiModel(val name: String, val id: String, val accountId: String = "")
 
 data class AuthInfo(val signedIn: Boolean, val username: String)
 
@@ -94,6 +99,8 @@ class AiViewModel(application: Application) :
 
     private val pending = ConcurrentHashMap<String, Pending>()
     private val pendingImages = ConcurrentHashMap<String, String>()
+    // Request payloads kept only for the Puter-to-account fallback on credit errors.
+    private val pendingPayloads = ConcurrentHashMap<String, Pair<String, String?>>()
     private val titleFallbacks = ConcurrentHashMap<Int, String>()
     private var requestCounter = 0L
 
@@ -136,12 +143,13 @@ class AiViewModel(application: Application) :
     private val _selectedModel = MutableStateFlow(
         AiModel(
             prefs.getString("model_name", "Default (Auto)") ?: "Default (Auto)",
-            prefs.getString("model_id", "") ?: ""
+            prefs.getString("model_id", "") ?: "",
+            prefs.getString("model_account", "") ?: ""
         )
     )
     val selectedModel: StateFlow<AiModel> = _selectedModel.asStateFlow()
 
-    private val _availableModels = MutableStateFlow<List<AiModel>>(emptyList())
+    private val _availableModels = MutableStateFlow<List<AiModel>>(accountModelsOf(appCtx))
     val availableModels: StateFlow<List<AiModel>> = _availableModels.asStateFlow()
 
     private val _memories = MutableStateFlow<List<MemoryEntity>>(emptyList())
@@ -220,7 +228,11 @@ class AiViewModel(application: Application) :
 
     fun selectModel(model: AiModel) {
         _selectedModel.value = model
-        prefs.edit().putString("model_id", model.id).putString("model_name", model.name).apply()
+        prefs.edit()
+            .putString("model_id", model.id)
+            .putString("model_name", model.name)
+            .putString("model_account", model.accountId)
+            .apply()
     }
 
     fun updateTheme(mode: String) {
@@ -278,6 +290,16 @@ class AiViewModel(application: Application) :
 
     fun togglePin(id: Int, isPinned: Boolean) {
         viewModelScope.launch { conversationDao.updatePin(id, isPinned) }
+    }
+
+    /** Saves a report for an AI reply. Reports stay on this device until a moderation backend exists. */
+    fun reportMessage(messageId: Int, content: String) {
+        val conversationId = _activeConversationId.value ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            db.reportDao().insert(
+                ReportEntity(messageId = messageId, conversationId = conversationId, content = content)
+            )
+        }
     }
 
     fun clearAllChats() {
@@ -404,10 +426,84 @@ class AiViewModel(application: Application) :
             if (!pending.containsKey(reqId)) return
             val image = built.imageDataUrl
             if (image != null) pendingImages[reqId] = image
-            engine.ask(reqId, built.messagesJson, _selectedModel.value.id, image != null)
+            val selected = _selectedModel.value
+            if (selected.accountId.isNotEmpty()) {
+                streamViaAccount(reqId, selected.accountId, built.messagesJson, image)
+            } else {
+                pendingPayloads[reqId] = built.messagesJson to image
+                engine.ask(reqId, built.messagesJson, selected.id, image != null)
+            }
         } catch (e: Exception) {
             failRequest(reqId, e.message ?: "Unexpected error")
         }
+    }
+
+    /** Refreshes the model picker after accounts are added or removed in Settings. */
+    fun reloadAccountModels() {
+        _availableModels.update { list -> list.filter { it.accountId.isEmpty() } + accountModelsOf(appCtx) }
+    }
+
+    /** Sends the request to a saved account. On quota or credit errors it moves on to the next saved account. */
+    private fun streamViaAccount(reqId: String, accountId: String, messagesJson: String, imageDataUrl: String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val accounts = AccountStore.load(appCtx)
+            val start = accounts.indexOfFirst { it.id == accountId }
+            if (start < 0) {
+                failRequest(reqId, "This account was removed. Pick another model.")
+                return@launch
+            }
+            val messages = try {
+                buildAccountMessages(messagesJson, imageDataUrl)
+            } catch (e: Exception) {
+                failRequest(reqId, "Could not prepare the message.")
+                return@launch
+            }
+            val order = accounts.subList(start, accounts.size) + accounts.subList(0, start)
+            var lastError: Throwable? = null
+            for (account in order) {
+                if (!pending.containsKey(reqId)) return@launch
+                val spec = ProviderCatalog.find(account.providerId) ?: continue
+                if (spec.id == ProviderCatalog.PUTER) continue
+                val result = OpenAiCompatClient.stream(
+                    baseUrl = account.baseUrl,
+                    apiKey = AccountStore.apiKey(account),
+                    model = account.model,
+                    messages = messages
+                ) { delta ->
+                    if (!pending.containsKey(reqId)) throw CancellationException("Stopped by user")
+                    onChunk(reqId, delta)
+                }
+                if (result.isSuccess) {
+                    onDone(reqId)
+                    return@launch
+                }
+                lastError = result.exceptionOrNull()
+                if (lastError == null || !OpenAiCompatClient.isQuotaError(lastError)) break
+            }
+            failRequest(reqId, lastError?.message ?: "No saved account could answer this request.")
+        }
+    }
+
+    /** Converts the request into OpenAI format; the image becomes an image_url part on the last user message. */
+    private fun buildAccountMessages(messagesJson: String, imageDataUrl: String?): JSONArray {
+        val array = JSONArray(messagesJson)
+        if (imageDataUrl != null) {
+            for (i in array.length() - 1 downTo 0) {
+                val message = array.getJSONObject(i)
+                if (message.optString("role") == "user") {
+                    val parts = JSONArray()
+                        .put(JSONObject().put("type", "text").put("text", message.optString("content")))
+                        .put(
+                            JSONObject()
+                                .put("type", "image_url")
+                                .put("image_url", JSONObject().put("url", imageDataUrl))
+                        )
+                    message.put("content", parts)
+                    break
+                }
+            }
+        }
+        return array
     }
 
     private fun buildRequest(entities: List<ChatEntity>): BuiltRequest {
@@ -559,7 +655,7 @@ class AiViewModel(application: Application) :
                 }
             }
             val sorted = list.distinctBy { it.id }.sortedBy { it.name.lowercase() }
-            _availableModels.value = listOf(AiModel("Default (Auto)", "")) + sorted
+            _availableModels.value = listOf(AiModel("Default (Auto)", "")) + sorted + accountModelsOf(appCtx)
         } catch (e: Exception) {
             // ignore malformed payload
         }
@@ -574,6 +670,7 @@ class AiViewModel(application: Application) :
     override fun onDone(reqId: String) {
         val p = pending.remove(reqId) ?: return
         pendingImages.remove(reqId)
+        pendingPayloads.remove(reqId)
         val finalText = p.text().trim()
         viewModelScope.launch {
             if (conversationExists(p.convoId)) {
@@ -590,7 +687,14 @@ class AiViewModel(application: Application) :
     }
 
     override fun onError(reqId: String, message: String) {
-        failRequest(reqId, message)
+        val payload = pendingPayloads.remove(reqId)
+        val fallback = AccountStore.load(appCtx).firstOrNull { it.model.isNotBlank() }
+        val isCredit = message.contains("credit", ignoreCase = true)
+        if (payload != null && fallback != null && isCredit && pending.containsKey(reqId)) {
+            streamViaAccount(reqId, fallback.id, payload.first, payload.second)
+        } else {
+            failRequest(reqId, message)
+        }
     }
 
     override fun onTitle(convoId: Int, title: String) {
@@ -622,3 +726,9 @@ class AiViewModel(application: Application) :
         private const val MAX_HISTORY = 30
     }
 }
+
+/** Model picker entries for every saved account that has a model name. */
+private fun accountModelsOf(context: Context): List<AiModel> =
+    AccountStore.load(context)
+        .filter { it.model.isNotBlank() }
+        .map { AiModel(name = "${it.label} · ${it.model}", id = it.model, accountId = it.id) }
