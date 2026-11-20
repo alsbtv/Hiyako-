@@ -1,9 +1,7 @@
 package com.hiyako.app.ui.screens
 
-import com.hiyako.app.providers.AccountStore
-import androidx.compose.foundation.gestures.scrollBy
-import android.net.Uri
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,7 +10,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -23,8 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -121,32 +116,18 @@ private fun EmptyChat(onPick: (String) -> Unit) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatRow(chat: ConversationEntity, active: Boolean, onClick: () -> Unit, onLongPress: () -> Unit, selectMode: Boolean = false, selected: Boolean = false) {
+private fun ChatRow(chat: ConversationEntity, active: Boolean, onClick: () -> Unit, onLongPress: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (active || selected) SecondarySurface else Color.Transparent)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (active) SecondarySurface else Color.Transparent)
             .combinedClickable(onClick = onClick, onLongClick = onLongPress).padding(vertical = 10.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (selectMode) {
-            Icon(if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, null, tint = if (selected) AccentBlue else TextMuted, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-        }
         if (chat.isPinned) {
             Icon(Icons.Default.PushPin, null, tint = AccentBlue, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
         }
         Text(chat.title, color = TextPrimary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun SheetAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = if (danger) DangerColor else AccentBlue, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(14.dp))
-        Text(label, color = if (danger) DangerColor else TextPrimary, fontSize = 16.sp)
     }
 }
 
@@ -162,6 +143,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var stickToBottom by remember { mutableStateOf(true) }
+    var showTopMenu by remember { mutableStateOf(false) }
 
     val messages by vm.messages.collectAsState()
     val conversations by vm.conversations.collectAsState()
@@ -169,17 +151,6 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     val activeId by vm.activeConversationId.collectAsState()
     val generating by vm.generating.collectAsState()
     val errors by vm.errors.collectAsState()
-    val auth by vm.auth.collectAsState()
-    val models by vm.availableModels.collectAsState()
-    val selectedModel by vm.selectedModel.collectAsState()
-    var showModelSheet by remember { mutableStateOf(false) }
-    var menuChat by remember { mutableStateOf<ConversationEntity?>(null) }
-    var renameTarget by remember { mutableStateOf<ConversationEntity?>(null) }
-    var renameText by remember { mutableStateOf("") }
-    var deleteTarget by remember { mutableStateOf<ConversationEntity?>(null) }
-    var selectMode by remember { mutableStateOf(false) }
-    var selectedIds by remember { mutableStateOf(setOf<Int>()) }
-    var confirmDeleteSelected by remember { mutableStateOf(false) }
 
     val partial: String? = activeId?.let { generating[it] }
     val errorText: String? = activeId?.let { errors[it] }
@@ -199,7 +170,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
         snapshotFlow { listState.isScrollInProgress }.collect { scrolling -> if (!scrolling) stickToBottom = !listState.canScrollForward }
     }
     LaunchedEffect(activeId) { stickToBottom = true }
-    LaunchedEffect(partial, totalItems, activeId) { if (stickToBottom && totalItems > 0) listState.scrollBy(100000f) }
+    LaunchedEffect(partial, totalItems, activeId) { if (stickToBottom && totalItems > 0) listState.animateScrollToItem(totalItems - 1) }
 
     val send: () -> Unit = {
         if (!vm.canSend()) {
@@ -239,38 +210,19 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                         Text(tr("New chat", "محادثة جديدة"), color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Spacer(Modifier.height(8.dp))
-                    if (selectMode) {
-                        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("${selectedIds.size} selected", "${selectedIds.size} محددة"), color = TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { if (selectedIds.isNotEmpty()) confirmDeleteSelected = true }) { Icon(Icons.Default.Delete, tr("Delete", "حذف"), tint = DangerColor) }
-                            IconButton(onClick = { selectMode = false; selectedIds = emptySet() }) { Icon(Icons.Default.Close, tr("Cancel", "إلغاء"), tint = TextSecondary) }
-                        }
-                    }
 
                     LazyColumn(Modifier.weight(1f)) {
                         if (pinned.isNotEmpty()) {
                             item { Text(tr("Pinned", "المثبتة"), color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp)) }
                             items(pinned, key = { "p${it.id}" }) { chat ->
-                                ChatRow(chat, chat.id == activeId,
-                                    onClick = {
-                                        if (selectMode) selectedIds = if (chat.id in selectedIds) selectedIds - chat.id else selectedIds + chat.id
-                                        else { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }
-                                    },
-                                    onLongPress = { if (selectMode) selectedIds = selectedIds + chat.id else menuChat = chat },
-                                    selectMode = selectMode, selected = chat.id in selectedIds)
+                                ChatRow(chat, chat.id == activeId, onClick = { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }, onLongPress = {})
                             }
                         }
                         val grouped = recent.groupBy { dateBucket(it.timestamp) }.toSortedMap()
                         grouped.forEach { (bucket, list) ->
                             item { Text(bucketLabels[bucket], color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp)) }
                             items(list, key = { "r${it.id}" }) { chat ->
-                                ChatRow(chat, chat.id == activeId,
-                                    onClick = {
-                                        if (selectMode) selectedIds = if (chat.id in selectedIds) selectedIds - chat.id else selectedIds + chat.id
-                                        else { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }
-                                    },
-                                    onLongPress = { if (selectMode) selectedIds = selectedIds + chat.id else menuChat = chat },
-                                    selectMode = selectMode, selected = chat.id in selectedIds)
+                                ChatRow(chat, chat.id == activeId, onClick = { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }, onLongPress = {})
                             }
                         }
                     }
@@ -281,7 +233,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(Modifier.size(36.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
-                            Text(auth.username.firstOrNull()?.uppercase() ?: "?", color = OnAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(vm.auth.value.username.firstOrNull()?.uppercase() ?: "?", color = OnAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
@@ -301,15 +253,36 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                     IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, tr("Menu", "القائمة"), tint = TextPrimary) }
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(chatTitle, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Row(
-                            Modifier.clip(RoundedCornerShape(10.dp)).clickable { showModelSheet = true }.padding(horizontal = 8.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(selectedModel.name, color = AccentBlue, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp))
-                            Icon(Icons.Default.KeyboardArrowDown, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
+                    }
+                    Box {
+                        IconButton(onClick = { showTopMenu = true }) {
+                            Icon(Icons.Default.MoreVert, tr("More", "المزيد"), tint = TextPrimary)
+                        }
+                        DropdownMenu(expanded = showTopMenu, onDismissRequest = { showTopMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(tr("Export chat", "تصدير المحادثة")) },
+                                onClick = {
+                                    showTopMenu = false
+                                    val exported = messages.joinToString("\n\n") { m ->
+                                        (if (m.isUser) tr("You", "أنت") else "AI") + ":\n" + m.content
+                                    }
+                                    if (exported.isBlank()) {
+                                        Toast.makeText(context, tr("Nothing to export yet", "لا توجد رسائل بعد"), Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, exported)
+                                        }
+                                        try {
+                                            context.startActivity(Intent.createChooser(intent, tr("Share", "مشاركة")))
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Error sharing", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            )
                         }
                     }
-                    IconButton(onClick = { vm.createNewConversation() }) { Icon(Icons.Default.Add, tr("New chat", "محادثة جديدة"), tint = TextPrimary) }
                 }
             },
             bottomBar = {
@@ -356,7 +329,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                             visible = showJump, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut(),
                             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
                         ) {
-                            SmallFloatingActionButton(onClick = { scope.launch { listState.scrollToItem((totalItems - 1).coerceAtLeast(0)); listState.scrollBy(100000f); stickToBottom = true } }, containerColor = ElevatedSurface, contentColor = TextPrimary) {
+                            SmallFloatingActionButton(onClick = { scope.launch { listState.animateScrollToItem((totalItems - 1).coerceAtLeast(0)); stickToBottom = true } }, containerColor = ElevatedSurface, contentColor = TextPrimary) {
                                 Icon(Icons.Default.KeyboardArrowDown, tr("Scroll to bottom", "الانتقال للأسفل"))
                             }
                         }
@@ -364,81 +337,6 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                 }
             }
         }
-    }
-
-    if (showModelSheet) {
-        val accountLabels = remember(models) { AccountStore.load(context).associate { it.id to it.label } }
-        ModalBottomSheet(onDismissRequest = { showModelSheet = false }, containerColor = CardDark) {
-            Text(tr("Choose a model", "اختر النموذج"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-            LazyColumn(Modifier.heightIn(max = 460.dp).padding(horizontal = 12.dp)) {
-                items(models, key = { it.accountId + "|" + it.id }) { m ->
-                    val isSelected = m.id == selectedModel.id && m.accountId == selectedModel.accountId
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.selectModel(m); showModelSheet = false }.padding(horizontal = 10.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(m.name, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(if (m.accountId.isEmpty()) "Puter" else accountLabels[m.accountId] ?: m.accountId, color = TextMuted, fontSize = 11.sp)
-                        }
-                        if (isSelected) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
-                    }
-                }
-            }
-            Spacer(Modifier.height(24.dp))
-        }
-    }
-
-    menuChat?.let { chat ->
-        ModalBottomSheet(onDismissRequest = { menuChat = null }, containerColor = CardDark) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
-                Text(chat.title, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(8.dp))
-                SheetAction(Icons.Default.Edit, tr("Rename", "إعادة التسمية")) { renameText = chat.title; renameTarget = chat; menuChat = null }
-                SheetAction(Icons.Default.PushPin, if (chat.isPinned) tr("Unpin", "إلغاء التثبيت") else tr("Pin", "تثبيت")) { vm.togglePin(chat.id, !chat.isPinned); menuChat = null }
-                SheetAction(Icons.Default.Share, tr("Export chat", "تصدير المحادثة")) {
-                    menuChat = null
-                    scope.launch {
-                        val exported = vm.chatShareText(chat.id)
-                        if (exported.isBlank()) Toast.makeText(context, tr("Nothing to export yet", "لا توجد رسائل بعد"), Toast.LENGTH_SHORT).show()
-                        else val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, exported) }; context.startActivity(Intent.createChooser(intent, "Share"))
-                    }
-                }
-                SheetAction(Icons.Default.CheckCircle, tr("Select multiple", "تحديد متعدد")) { selectMode = true; selectedIds = setOf(chat.id); menuChat = null }
-                SheetAction(Icons.Default.Delete, tr("Delete", "حذف"), danger = true) { deleteTarget = chat; menuChat = null }
-            }
-        }
-    }
-
-    renameTarget?.let { chat ->
-        AlertDialog(
-            onDismissRequest = { renameTarget = null },
-            containerColor = CardDark,
-            title = { Text(tr("Rename chat", "إعادة تسمية المحادثة"), color = TextPrimary) },
-            text = { OutlinedTextField(value = renameText, onValueChange = { renameText = it }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
-            confirmButton = { TextButton(onClick = { vm.renameChat(chat.id, renameText); renameTarget = null }) { Text(tr("Save", "حفظ"), color = AccentBlue) } },
-            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
-        )
-    }
-
-    deleteTarget?.let { chat ->
-        ConfirmDialog(
-            title = tr("Delete this chat?", "حذف هذه المحادثة؟"),
-            message = tr("\"${chat.title}\" will be deleted. It cannot be undone.", "سيتم حذف \"${chat.title}\". لا يمكن التراجع."),
-            confirmLabel = tr("Delete", "حذف"), danger = true,
-            onConfirm = { vm.deleteChat(chat.id); deleteTarget = null },
-            onDismiss = { deleteTarget = null }
-        )
-    }
-
-    if (confirmDeleteSelected) {
-        ConfirmDialog(
-            title = tr("Delete ${selectedIds.size} chats?", "حذف ${selectedIds.size} محادثات؟"),
-            message = tr("The selected chats will be deleted. It cannot be undone.", "سيتم حذف المحادثات المحددة. لا يمكن التراجع."),
-            confirmLabel = tr("Delete", "حذف"), danger = true,
-            onConfirm = { selectedIds.forEach { vm.deleteChat(it) }; selectedIds = emptySet(); selectMode = false; confirmDeleteSelected = false },
-            onDismiss = { confirmDeleteSelected = false }
-        )
     }
 
     if (showAttachmentSheet) {
