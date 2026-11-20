@@ -1,5 +1,8 @@
 package com.hiyako.app.ui.screens
 
+import kotlinx.coroutines.flow.first
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.Brush
 import android.content.Context
 import android.util.Log
 import android.webkit.CookieManager
@@ -9,13 +12,16 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,15 +31,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hiyako.app.data.db.AppDatabase
 import com.hiyako.app.providers.*
 import com.hiyako.app.security.KeyVault
+import com.hiyako.app.ui.components.*
 import com.hiyako.app.ui.i18n.Lang
 import com.hiyako.app.ui.i18n.tr
 import com.hiyako.app.ui.theme.*
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,6 +68,12 @@ fun SettingsScreen(
     
     var showAllProviders by remember { mutableStateOf(false) }
     val auth by vm.auth.collectAsState()
+    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    var deletingAccount by remember { mutableStateOf<Account?>(null) }
+    val addableProviders = remember { ProviderCatalog.all.filter { it.id != ProviderCatalog.PUTER } }
+    val versionLabel = remember {
+        try { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() } catch (e: Exception) { "" }
+    }
 
     fun fetchModels(account: Account) {
         scope.launch {
@@ -79,310 +94,207 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         containerColor = OledBlack,
         topBar = {
-            TopAppBar(
-                title = { Text(tr("Settings", "الإعدادات"), fontWeight = FontWeight.Bold, color = TextPrimary) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "رجوع"), tint = TextPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
+            LargeTopAppBar(
+                title = { Text(tr("Settings", "الإعدادات")) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "رجوع")) } },
+                scrollBehavior = scroll,
+                colors = TopAppBarDefaults.largeTopAppBarColors(
+                    containerColor = OledBlack, scrolledContainerColor = DeepSurface,
+                    titleContentColor = TextPrimary, navigationIconContentColor = TextPrimary
+                )
             )
         }
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .padding(innerPadding)
-                .fillMaxWidth()
+                .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            SectionCard(title = tr("Appearance", "المظهر"), subtitle = tr("Pick a theme. It applies to the whole app.", "اختر ثيماً. يُطبَّق على التطبيق كله.")) {
-                AppPalettes.all.chunked(3).forEach { rowItems ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        rowItems.forEach { palette ->
-                            ThemeCard(
-                                palette = palette,
-                                selected = ThemeState.palette.id == palette.id,
-                                onClick = { ThemeState.select(context, palette.id) },
-                                modifier = Modifier.weight(1f)
-                            )
+            // 1) Account Card
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                    .background(Brush.linearGradient(listOf(AccentBlue.copy(alpha = 0.25f), SecondarySurface)))
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.size(52.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
+                    Text(auth.username.firstOrNull()?.uppercase() ?: "✦", color = OnAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(if (auth.signedIn && auth.username.isNotEmpty()) auth.username else tr("Not signed in", "غير مسجّل الدخول"), color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (auth.signedIn) "Puter" else tr("Sign in to start chatting", "سجّل الدخول لتبدأ"), color = TextSecondary, fontSize = 13.sp)
+                }
+                HiyakoButton(
+                    text = if (auth.signedIn) tr("Switch", "تبديل") else tr("Sign in", "دخول"),
+                    onClick = {
+                        if (auth.signedIn) {
+                            clearPuterSession()
+                            vm.engine.reload()
+                            scope.launch { withTimeoutOrNull(15_000L) { vm.engine.ready.first { it } }; onSignIn() }
+                        } else {
+                            onSignIn()
+                        }
+                    },
+                    kind = ButtonKind.Tonal
+                )
+            }
+
+            // 2) Appearance
+            SettingsGroup(tr("Appearance", "المظهر")) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(AppPalettes.all, key = { it.id }) { p ->
+                            Column(Modifier.width(100.dp)) {
+                                Column(
+                                    Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(16.dp)).background(if (p.id == "paper") Color(0xFFFFFFFF) else Color(0xFF000000))
+                                        .border(if (ThemeState.palette.id == p.id) 2.dp else 1.dp, if (ThemeState.palette.id == p.id) p.accent else p.border, RoundedCornerShape(16.dp))
+                                        .clickable { ThemeState.select(context, p.id) }.padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(Modifier.align(Alignment.End).size(50.dp, 12.dp).background(p.userBubble, RoundedCornerShape(6.dp)))
+                                    Box(Modifier.size(60.dp, 8.dp).background(p.textSecondary.copy(alpha = 0.5f), RoundedCornerShape(4.dp)))
+                                    Spacer(Modifier.weight(1f))
+                                    Box(Modifier.size(14.dp).background(p.accent, CircleShape))
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(p.name, color = TextPrimary, fontSize = 12.sp, fontWeight = if (ThemeState.palette.id == p.id) FontWeight.SemiBold else FontWeight.Normal)
+                            }
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(tr("Language", "اللغة"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LangOption("العربية", selected = Lang.arabic, onClick = { Lang.set(context, true) }, modifier = Modifier.weight(1f))
-                    LangOption("English", selected = !Lang.arabic, onClick = { Lang.set(context, false) }, modifier = Modifier.weight(1f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        LangChip("العربية", Lang.arabic, Modifier.weight(1f)) { Lang.set(context, true) }
+                        LangChip("English", !Lang.arabic, Modifier.weight(1f)) { Lang.set(context, false) }
+                    }
                 }
             }
 
-            SectionCard(
-                title = tr("Providers and accounts", "المزودون والحسابات"),
-                subtitle = tr(
-                    "Add as many accounts as you like. Keys are encrypted with the Android Keystore.",
-                    "أضف أي عدد من الحسابات. تُشفَّر المفاتيح بمخزن أندرويد."
-                )
-            ) {
-                status?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = AccentBlue)
-                    Spacer(Modifier.height(6.dp))
+            // 3) Providers
+            SettingsGroup(tr("Providers and accounts", "المزودون والحسابات")) {
+                if (accounts.isEmpty()) {
+                    Text(tr("No accounts yet. Add one to unlock more models.", "لا توجد حسابات بعد. أضف حساباً لفتح نماذج أكثر."), color = TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(16.dp))
+                }
+                accounts.forEachIndexed { i, a ->
+                    SettingsRow(
+                        icon = Icons.Outlined.Key, title = a.label,
+                        subtitle = (defaultModelOf(context, a).ifBlank { tr("No model yet", "لا يوجد نموذج بعد") }),
+                        showDivider = i < accounts.lastIndex,
+                        onClick = { pickingFor = a }
+                    )
                 }
                 
-                val displayedProviders = if (showAllProviders) ProviderCatalog.all else ProviderCatalog.all.take(4)
-                
-                displayedProviders.forEach { spec ->
-                    val mine = accounts.filter { it.providerId == spec.id }
-                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(spec.name, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                                if (spec.note.isNotEmpty()) {
-                                    Text(spec.note, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                                }
-                            }
-                            if (spec.id == ProviderCatalog.PUTER) {
-                                OutlinedButton(onClick = {
-                                    if (auth.signedIn) {
-                                        clearPuterSession()
-                                        vm.engine.reload()
-                                        scope.launch {
-                                            delay(1000)
-                                            onSignIn()
-                                        }
-                                    } else {
-                                        onSignIn()
-                                    }
-                                }) { 
-                                    Text(if (auth.signedIn) tr("Switch account", "تبديل الحساب") else tr("Sign In", "تسجيل الدخول"), color = AccentBlue) 
-                                }
-                            } else {
-                                IconButton(onClick = { addingFor = spec }) {
-                                    Icon(Icons.Default.Add, contentDescription = tr("Add account", "إضافة حساب"), tint = AccentBlue)
-                                }
-                            }
+                val displayedProviders = if (showAllProviders) addableProviders else addableProviders.take(3)
+                displayedProviders.forEachIndexed { i, spec ->
+                    SettingsRow(
+                        icon = Icons.Outlined.Dns,
+                        title = spec.name,
+                        subtitle = spec.note.takeIf { it.isNotBlank() },
+                        showDivider = i < displayedProviders.lastIndex,
+                        onClick = { addingFor = spec },
+                        trailing = {
+                            Icon(Icons.Default.Add, null, tint = AccentBlue)
                         }
-                        mine.forEach { account ->
-                            val modelCount = ModelCache.models(context, account.id).size
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(modifier = Modifier.weight(1f).clickable { pickingFor = account }) {
-                                    Text(account.label, color = TextPrimary)
-                                    Text(
-                                        defaultModelOf(context, account).ifBlank { tr("No model yet", "لا يوجد نموذج بعد") } +
-                                            tr(" · $modelCount models", " · $modelCount نموذجاً"),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextSecondary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                IconButton(onClick = { fetchModels(account) }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = tr("Load models", "تحميل النماذج"), tint = TextSecondary)
-                                }
-                                IconButton(onClick = {
-                                    AccountStore.remove(context, account.id)
-                                    accounts = AccountStore.load(context)
-                                    vm.reloadAccountModels()
-                                }) {
-                                    Icon(Icons.Default.Delete, contentDescription = tr("Remove account", "حذف الحساب"), tint = Color.Red)
-                                }
-                            }
-                        }
-                    }
+                    )
                 }
                 
-                if (ProviderCatalog.all.size > 4) {
+                if (addableProviders.size > 3) {
                     TextButton(
                         onClick = { showAllProviders = !showAllProviders },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     ) {
                         Icon(if (showAllProviders) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = AccentBlue)
                         Spacer(Modifier.width(4.dp))
-                        Text(
-                            if (showAllProviders) tr("Show less", "عرض أقل") else tr("Show all providers", "عرض كل المزودين"),
-                            color = AccentBlue
-                        )
+                        Text(if (showAllProviders) tr("Show less", "عرض أقل") else tr("Show all providers", "عرض كل المزودين"), color = AccentBlue)
                     }
                 }
             }
 
-            SectionCard(title = tr("Tools", "الأدوات")) {
-                OutlinedButton(onClick = onNavigateToWorkspace, modifier = Modifier.fillMaxWidth()) {
-                    Text(tr("Workspace (GitHub)", "مساحة العمل (GitHub)"), color = TextPrimary)
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onNavigateToMemory, modifier = Modifier.fillMaxWidth()) {
-                    Text(tr("Memory", "الذاكرة"), color = TextPrimary)
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onNavigateToUpdater, modifier = Modifier.fillMaxWidth()) {
-                    Text(tr("Check for updates", "التحقق من التحديثات"), color = TextPrimary)
-                }
+            // 4) Tools
+            SettingsGroup(tr("Tools", "الأدوات")) {
+                SettingsRow(Icons.Outlined.Folder, tr("Workspace (GitHub)", "مساحة العمل (GitHub)"), onClick = onNavigateToWorkspace)
+                SettingsRow(Icons.Outlined.Memory, tr("Memory", "الذاكرة"), onClick = onNavigateToMemory)
+                SettingsRow(Icons.Outlined.SystemUpdate, tr("Check for updates", "التحقق من التحديثات"), showDivider = false, onClick = onNavigateToUpdater)
             }
 
-            SectionCard(
-                title = tr("Privacy and data", "الخصوصية والبيانات"),
-                subtitle = tr("Everything is stored on this device. Deleting data cannot be undone.", "كل شيء مخزّن على هذا الجهاز. حذف البيانات لا يمكن التراجع عنه.")
-            ) {
-                OutlinedButton(onClick = { confirmClear = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(tr("Clear all chats", "حذف كل المحادثات"), color = TextPrimary)
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = { confirmWipe = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.2f))
-                ) {
-                    Text(tr("Delete all data on this device", "حذف كل البيانات على هذا الجهاز"), color = Color.Red)
-                }
+            // 5) Privacy
+            SettingsGroup(tr("Privacy and data", "الخصوصية والبيانات")) {
+                SettingsRow(Icons.Outlined.DeleteSweep, tr("Clear all chats", "حذف كل المحادثات"), onClick = { confirmClear = true })
+                SettingsRow(Icons.Outlined.DeleteForever, tr("Delete all data on this device", "حذف كل البيانات على هذا الجهاز"), danger = true, showDivider = false, onClick = { confirmWipe = true })
             }
+
+            Text("Hiyako $versionLabel", color = TextMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center)
             Spacer(Modifier.height(24.dp))
         }
     }
 
+    // Dialogs...
+    if (confirmClear) ConfirmDialog(
+        title = tr("Clear all chats?", "حذف كل المحادثات؟"), message = tr("This deletes every conversation on this device. It cannot be undone.", "سيتم حذف كل المحادثات على هذا الجهاز. لا يمكن التراجع."),
+        confirmLabel = tr("Delete", "حذف"), danger = true,
+        onConfirm = { onClearChat(); confirmClear = false }, onDismiss = { confirmClear = false }
+    )
+
+    if (confirmWipe) ConfirmDialog(
+        title = tr("Delete all data?", "حذف كل البيانات؟"), message = tr("This deletes all chats, memories, saved accounts and keys on this device.", "سيتم حذف كل المحادثات والذاكرة والحسابات والمفاتيح على هذا الجهاز."),
+        confirmLabel = tr("Delete everything", "حذف كل شيء"), danger = true,
+        onConfirm = { wipeLocalData(context); accounts = emptyList(); vm.reloadAccountModels(); wiped = true; confirmWipe = false }, onDismiss = { confirmWipe = false }
+    )
+
     addingFor?.let { spec ->
-        AddAccountDialog(
-            spec = spec,
-            onDismiss = { addingFor = null },
-            onSave = { label, url, model, key ->
-                val account = AccountStore.add(context, spec.id, label, url, model, key)
-                accounts = AccountStore.load(context)
-                addingFor = null
-                fetchModels(account)
-            }
-        )
+        AddAccountDialog(spec = spec, onDismiss = { addingFor = null }, onSave = { label, url, model, key ->
+            val account = AccountStore.add(context, spec.id, label, url, model, key)
+            accounts = AccountStore.load(context)
+            addingFor = null
+            fetchModels(account)
+        })
     }
     pickingFor?.let { account ->
-        DefaultModelDialog(
-            account = account,
-            models = ModelCache.models(context, account.id),
-            onPick = { model ->
-                setAccountModel(context, account.id, model)
+        DefaultModelDialog(account = account, models = ModelCache.models(context, account.id), onPick = { model ->
+            setAccountModel(context, account.id, model)
+            accounts = AccountStore.load(context)
+            vm.reloadAccountModels()
+            pickingFor = null
+        }, onRefresh = {
+            pickingFor = null
+            fetchModels(account)
+        }, onDelete = {
+            pickingFor = null
+            deletingAccount = account
+        }, onDismiss = { pickingFor = null })
+    }
+    deletingAccount?.let { account ->
+        ConfirmDialog(
+            title = tr("Delete ${account.label}?", "حذف ${account.label}؟"),
+            message = tr("The saved key and model list for this account will be removed from this device.", "سيتم حذف المفتاح المحفوظ وقائمة النماذج لهذا الحساب من هذا الجهاز."),
+            confirmLabel = tr("Delete", "حذف"), danger = true,
+            onConfirm = {
+                AccountStore.remove(context, account.id)
+                ModelCache.remove(context, account.id)
+                if (vm.selectedModel.value.accountId == account.id) vm.selectModel(AiModel("Default (Auto)", ""))
                 accounts = AccountStore.load(context)
                 vm.reloadAccountModels()
-                pickingFor = null
+                deletingAccount = null
             },
-            onDismiss = { pickingFor = null }
-        )
-    }
-    if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text(tr("Clear all chats?", "حذف كل المحادثات؟"), color = TextPrimary) },
-            text = { Text(tr("This deletes every conversation on this device. It cannot be undone.", "سيتم حذف كل المحادثات على هذا الجهاز. لا يمكن التراجع."), color = TextSecondary) },
-            confirmButton = { Button(onClick = { onClearChat(); confirmClear = false }) { Text(tr("Delete", "حذف")) } },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
-        )
-    }
-    if (confirmWipe) {
-        AlertDialog(
-            onDismissRequest = { confirmWipe = false },
-            title = { Text(tr("Delete all data?", "حذف كل البيانات؟"), color = TextPrimary) },
-            text = { Text(tr("This deletes all chats, memories, saved accounts and keys on this device.", "سيتم حذف كل المحادثات والذاكرة والحسابات والمفاتيح على هذا الجهاز."), color = TextSecondary) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        wipeLocalData(context)
-                        accounts = emptyList()
-                        vm.reloadAccountModels()
-                        wiped = true
-                        confirmWipe = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-                ) { Text(tr("Delete everything", "حذف كل شيء")) }
-            },
-            dismissButton = { TextButton(onClick = { confirmWipe = false }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
+            onDismiss = { deletingAccount = null }
         )
     }
 }
 
 @Composable
-private fun SectionCard(title: String, subtitle: String? = null, content: @Composable () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = DeepSurface)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-            if (subtitle != null) {
-                Spacer(Modifier.height(2.dp))
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-            }
-            Spacer(Modifier.height(12.dp))
-            content()
-        }
-    }
-}
-
-@Composable
-private fun LangOption(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun LangChip(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) AccentBlue.copy(alpha = 0.15f) else SecondarySurface)
+        modifier.clip(RoundedCornerShape(14.dp))
+            .background(if (selected) AccentBlue.copy(alpha = 0.18f) else ElevatedSurface)
             .border(1.dp, if (selected) AccentBlue else BorderColor, RoundedCornerShape(14.dp))
-            .clickable { onClick() }
-            .padding(vertical = 12.dp),
+            .clickable(onClick = onClick).padding(vertical = 14.dp),
         contentAlignment = Alignment.Center
-    ) {
-        Text(label, color = if (selected) AccentBlue else TextPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-    }
-}
-
-@Composable
-private fun ThemeCard(palette: AppPalette, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (palette.id == "paper") Color(0xFFFFFFFF) else Color(0xFF000000))
-                .border(
-                    width = if (selected) 2.dp else 1.dp,
-                    color = if (selected) AccentBlue else palette.border,
-                    shape = RoundedCornerShape(16.dp)
-                )
-                .clickable { onClick() }
-        ) {
-            Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(width = 36.dp, height = 10.dp).background(palette.userBubble, RoundedCornerShape(6.dp)))
-            Box(Modifier.align(Alignment.BottomStart).padding(8.dp).size(16.dp).background(palette.accent, CircleShape))
-            if (selected) Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).size(16.dp))
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(palette.name, style = MaterialTheme.typography.bodySmall, color = TextPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-    }
-}
-
-@Composable
-private fun DefaultModelDialog(account: Account, models: List<String>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = CardDark,
-        title = { Text(tr("Default model for ${account.label}", "النموذج الافتراضي لـ ${account.label}"), color = TextPrimary) },
-        text = {
-            if (models.isEmpty()) {
-                Text(tr("No models loaded yet.", "لم تُحمَّل النماذج بعد."), color = TextSecondary)
-            } else {
-                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                    items(models) { id ->
-                        Row(Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(id, modifier = Modifier.weight(1f), color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (id == account.model) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Close", "إغلاق"), color = AccentBlue) } }
-    )
+    ) { Text(label, color = if (selected) AccentBlue else TextSecondary, fontWeight = FontWeight.SemiBold) }
 }
 
 private fun clearPuterSession() {
@@ -406,6 +318,36 @@ private fun wipeLocalData(context: Context) {
 }
 
 @Composable
+private fun DefaultModelDialog(account: Account, models: List<String>, onPick: (String) -> Unit, onRefresh: () -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardDark,
+        title = { Text(tr("Default model for ${account.label}", "النموذج الافتراضي لـ ${account.label}"), color = TextPrimary) },
+        text = {
+            if (models.isEmpty()) {
+                Text(tr("No models loaded yet.", "لم تُحمَّل النماذج بعد."), color = TextSecondary)
+            } else {
+                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                    items(models) { id ->
+                        Row(Modifier.fillMaxWidth().clickable { onPick(id) }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(id, modifier = Modifier.weight(1f), color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (id == account.model) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row {
+                TextButton(onClick = onRefresh) { Text(tr("Refresh models", "تحديث النماذج"), color = AccentBlue) }
+                TextButton(onClick = onDismiss) { Text(tr("Close", "إغلاق"), color = AccentBlue) }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDelete) { Text(tr("Delete account", "حذف الحساب"), color = DangerColor) } }
+    )
+}
+
+@Composable
 private fun AddAccountDialog(spec: ProviderSpec, onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
     var label by remember { mutableStateOf(spec.name) }
     var baseUrl by remember { mutableStateOf(spec.baseUrl) }
@@ -425,7 +367,7 @@ private fun AddAccountDialog(spec: ProviderSpec, onDismiss: () -> Unit, onSave: 
                 }
                 OutlinedTextField(value = baseUrl, onValueChange = { baseUrl = it }, label = { Text(tr("Base URL (https://)", "رابط الأساس (https://)")) }, singleLine = true, enabled = spec.editableBaseUrl, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = model, onValueChange = { model = it }, label = { Text(tr("Default model (optional)", "النموذج الافتراضي (اختياري)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                error?.let { Text(it, color = Color.Red, style = MaterialTheme.typography.bodySmall) }
+                error?.let { Text(it, color = DangerColor, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {

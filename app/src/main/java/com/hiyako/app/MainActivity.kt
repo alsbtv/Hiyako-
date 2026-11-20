@@ -8,7 +8,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -33,6 +38,7 @@ import com.hiyako.app.ui.screens.*
 import com.hiyako.app.ui.theme.AppTheme
 import com.hiyako.app.ui.theme.OledBlack
 import com.hiyako.app.ui.theme.TextPrimary
+import com.hiyako.app.ui.i18n.Lang
 
 class MainActivity : ComponentActivity() {
 
@@ -57,7 +63,7 @@ class MainActivity : ComponentActivity() {
             }
             val density = LocalDensity.current
 
-            androidx.compose.runtime.CompositionLocalProvider(LocalDensity provides Density(density.density, aiViewModel.fontSize)) {
+            CompositionLocalProvider(LocalDensity provides Density(density.density, aiViewModel.fontSize)) {
                 AppTheme(darkTheme = darkTheme) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                         AppRoot(aiViewModel)
@@ -82,11 +88,19 @@ private fun AppRoot(vm: AiViewModel) {
         screenState = if (screenState == "settings") "chat" else "settings"
     }
 
+    val dir = if (Lang.arabic) -1 else 1
+    val order = listOf("chat", "settings", "workspace", "memory", "updater")
+
     Box(Modifier.fillMaxSize()) {
-        Crossfade(
+        AnimatedContent(
             targetState = screenState,
-            animationSpec = tween(durationMillis = 300),
-            label = "screen_transition"
+            transitionSpec = {
+                val deeper = order.indexOf(targetState) > order.indexOf(initialState)
+                val s = if (deeper) dir else -dir
+                (slideInHorizontally(tween(300)) { it / 6 * s } + fadeIn(tween(250))) togetherWith
+                (slideOutHorizontally(tween(300)) { -it / 6 * s } + fadeOut(tween(150)))
+            },
+            label = "screens"
         ) { screen ->
             when (screen) {
                 "workspace" -> WorkspaceScreen(
@@ -101,7 +115,7 @@ private fun AppRoot(vm: AiViewModel) {
                     onNavigateToWorkspace = { screenState = "workspace" },
                     onNavigateToUpdater = { screenState = "updater" },
                     onNavigateToMemory = { screenState = "memory" },
-                    onSignIn = { vm.signIn(); screenState = "chat" },
+                    onSignIn = { vm.signIn() }, // Removed screenState = "chat" to prevent Puter bug
                     onClearChat = { vm.clearAllChats() },
                     vm = vm
                 )

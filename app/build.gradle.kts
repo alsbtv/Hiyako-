@@ -12,8 +12,9 @@ android {
         applicationId = "com.hiyako.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        val runNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toIntOrNull() ?: 1
+        versionCode = runNumber
+        versionName = "1.0.$runNumber"
     }
 
     signingConfigs {

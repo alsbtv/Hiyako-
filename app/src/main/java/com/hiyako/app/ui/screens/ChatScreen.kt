@@ -1,28 +1,19 @@
 package com.hiyako.app.ui.screens
 
+import com.hiyako.app.providers.AccountStore
+import androidx.compose.foundation.gestures.scrollBy
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -30,49 +21,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -86,50 +44,24 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.hiyako.app.data.db.ConversationEntity
-import com.hiyako.app.ui.components.AssistantMessage
-import com.hiyako.app.ui.components.ComposerBar
-import com.hiyako.app.ui.components.ErrorCard
-import com.hiyako.app.ui.components.SuggestionCard
-import com.hiyako.app.ui.components.TypingDots
-import com.hiyako.app.ui.components.UserMessage
-import com.hiyako.app.ui.components.chatShareText
+import com.hiyako.app.ui.components.*
 import com.hiyako.app.ui.i18n.tr
-import com.hiyako.app.ui.theme.AccentBlue
-import com.hiyako.app.ui.theme.BorderColor
-import com.hiyako.app.ui.theme.CardDark
-import com.hiyako.app.ui.theme.DeepSurface
-import com.hiyako.app.ui.theme.ElevatedSurface
-import com.hiyako.app.ui.theme.OledBlack
-import com.hiyako.app.ui.theme.SecondarySurface
-import com.hiyako.app.ui.theme.TextMuted
-import com.hiyako.app.ui.theme.TextPrimary
-import com.hiyako.app.ui.theme.TextSecondary
+import com.hiyako.app.ui.theme.*
 import com.hiyako.app.util.queryDisplayName
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 @Composable
-private fun SearchField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    modifier: Modifier = Modifier
-) {
+private fun SearchField(value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
     Row(
-        modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .background(ElevatedSurface, RoundedCornerShape(22.dp))
-            .padding(horizontal = 12.dp),
+        modifier.fillMaxWidth().height(48.dp).background(ElevatedSurface, RoundedCornerShape(24.dp)).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(Icons.Default.Search, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
         BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp),
-            cursorBrush = SolidColor(AccentBlue),
+            value = value, onValueChange = onValueChange, singleLine = true,
+            textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp), cursorBrush = SolidColor(AccentBlue),
             modifier = Modifier.weight(1f),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
@@ -141,57 +73,46 @@ private fun SearchField(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+private fun dateBucket(ts: Long, now: Long = System.currentTimeMillis()): Int {
+    val c1 = Calendar.getInstance().apply { timeInMillis = ts; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+    val c2 = Calendar.getInstance().apply { timeInMillis = now; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+    val days = (c2.timeInMillis - c1.timeInMillis) / 86_400_000L
+    return when { days <= 0 -> 0; days == 1L -> 1; days <= 7 -> 2; else -> 3 }
+}
+
 @Composable
-private fun ModelPickerSheet(
-    models: List<AiModel>,
-    selectedId: String,
-    onSelect: (AiModel) -> Unit,
-    onRefresh: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var q by remember { mutableStateOf("") }
-    val filtered = remember(models, q) {
-        if (q.isBlank()) models else models.filter { it.name.contains(q, true) || it.id.contains(q, true) }
-    }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = CardDark) {
-        Column(Modifier.fillMaxWidth().fillMaxSize(0.8f).padding(horizontal = 16.dp)) {
-            Text(tr("Choose a model", "اختر نموذجاً"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
-            if (models.isEmpty()) {
-                Text(
-                    tr(
-                        "No models yet. Add an account in Settings and load its models, or sign in to Puter.",
-                        "لا توجد نماذج بعد. أضف حساباً من الإعدادات وحمّل نماذجه، أو سجّل الدخول إلى Puter."
-                    ),
-                    color = TextSecondary,
-                    fontSize = 14.sp
-                )
-                TextButton(onClick = onRefresh) { Text(tr("Refresh", "تحديث"), color = AccentBlue) }
-            } else {
-                SearchField(q, { q = it }, tr("Search models", "ابحث عن نموذج"))
-                Spacer(Modifier.height(8.dp))
-                LazyColumn(Modifier.weight(1f)) {
-                    items(filtered, key = { "${it.accountId}|${it.id}|${it.name}" }) { m ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { onSelect(m) }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(m.name, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                if (m.id.isNotEmpty() && m.id != m.name) {
-                                    Text(m.id, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                            }
-                            if (m.id == selectedId) {
-                                Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
-                            }
-                        }
-                    }
+private fun EmptyChat(onPick: (String) -> Unit) {
+    val items = listOf(
+        Icons.Outlined.Lightbulb to tr("Explain a complex idea simply", "اشرح لي فكرة معقدة ببساطة"),
+        Icons.Outlined.Edit to tr("Help me write a message", "ساعدني في كتابة رسالة"),
+        Icons.Outlined.CalendarToday to tr("Plan my day step by step", "رتّب لي يومي خطوة بخطوة"),
+        Icons.Outlined.Code to tr("Write code for an idea", "اكتب كوداً لفكرة لدي")
+    )
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Box(contentAlignment = Alignment.Center) {
+            Box(Modifier.size(140.dp).background(Brush.radialGradient(listOf(AccentBlue.copy(alpha = 0.30f), Color.Transparent))))
+            Box(Modifier.size(60.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
+                Text("✦", color = OnAccent, fontSize = 26.sp)
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(tr("How can I help you today?", "كيف أقدر أساعدك اليوم؟"), color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(24.dp))
+        items.forEachIndexed { i, (icon, text) ->
+            AnimatedVisibility(
+                visible = shown,
+                enter = fadeIn(tween(300, delayMillis = i * 80)) + slideInVertically(tween(300, delayMillis = i * 80)) { it / 4 }
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(18.dp)).background(SecondarySurface).border(1.dp, BorderColor, RoundedCornerShape(18.dp)).clickable { onPick(text) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(icon, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(text, color = TextPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -199,78 +120,30 @@ private fun ModelPickerSheet(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        color = TextMuted,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp)
-    )
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ConversationRow(
-    chat: ConversationEntity,
-    active: Boolean,
-    multiSelect: Boolean,
-    selected: Boolean,
-    menuOpen: Boolean,
-    onOpen: () -> Unit,
-    onLongPress: () -> Unit,
-    onToggleSelect: (Boolean) -> Unit,
-    onMenu: () -> Unit,
-    onDismissMenu: () -> Unit,
-    onRename: () -> Unit,
-    onPin: () -> Unit,
-    onDelete: () -> Unit
-) {
+private fun ChatRow(chat: ConversationEntity, active: Boolean, onClick: () -> Unit, onLongPress: () -> Unit, selectMode: Boolean = false, selected: Boolean = false) {
     Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected || active) SecondarySurface else Color.Transparent)
-            .combinedClickable(onClick = onOpen, onLongClick = onLongPress)
-            .padding(vertical = 8.dp, horizontal = 10.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (active || selected) SecondarySurface else Color.Transparent)
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress).padding(vertical = 10.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (multiSelect) {
-            Checkbox(
-                checked = selected,
-                onCheckedChange = onToggleSelect,
-                colors = CheckboxDefaults.colors(checkedColor = AccentBlue)
-            )
-        } else if (chat.isPinned) {
-            Icon(Icons.Default.PushPin, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
+        if (selectMode) {
+            Icon(if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, null, tint = if (selected) AccentBlue else TextMuted, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+        }
+        if (chat.isPinned) {
+            Icon(Icons.Default.PushPin, null, tint = AccentBlue, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
         }
-        Text(
-            chat.title,
-            color = TextPrimary,
-            fontSize = 14.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        if (!multiSelect) {
-            Box {
-                IconButton(onClick = onMenu, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.MoreVert, tr("More", "المزيد"), tint = TextSecondary, modifier = Modifier.size(18.dp))
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = onDismissMenu) {
-                    DropdownMenuItem(text = { Text(tr("Rename", "إعادة التسمية")) }, onClick = onRename)
-                    DropdownMenuItem(
-                        text = { Text(if (chat.isPinned) tr("Unpin", "إلغاء التثبيت") else tr("Pin", "تثبيت")) },
-                        onClick = onPin
-                    )
-                    DropdownMenuItem(
-                        text = { Text(tr("Delete", "حذف"), color = Color.Red) },
-                        onClick = onDelete
-                    )
-                }
-            }
-        }
+        Text(chat.title, color = TextPrimary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun SheetAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = if (danger) DangerColor else AccentBlue, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        Text(label, color = if (danger) DangerColor else TextPrimary, fontSize = 16.sp)
     }
 }
 
@@ -284,12 +157,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     var input by remember { mutableStateOf("") }
     var attachmentUri by remember { mutableStateOf<Uri?>(null) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
-    var showModelSheet by remember { mutableStateOf(false) }
-    var showTopMenu by remember { mutableStateOf(false) }
-    var renameTarget by remember { mutableStateOf<ConversationEntity?>(null) }
-    var deleteTargets by remember { mutableStateOf<List<Int>?>(null) }
     var query by remember { mutableStateOf("") }
-    var expandedMenuId by remember { mutableStateOf<Int?>(null) }
     var stickToBottom by remember { mutableStateOf(true) }
 
     val messages by vm.messages.collectAsState()
@@ -298,9 +166,17 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     val activeId by vm.activeConversationId.collectAsState()
     val generating by vm.generating.collectAsState()
     val errors by vm.errors.collectAsState()
+    val auth by vm.auth.collectAsState()
     val models by vm.availableModels.collectAsState()
     val selectedModel by vm.selectedModel.collectAsState()
-    val auth by vm.auth.collectAsState()
+    var showModelSheet by remember { mutableStateOf(false) }
+    var menuChat by remember { mutableStateOf<ConversationEntity?>(null) }
+    var renameTarget by remember { mutableStateOf<ConversationEntity?>(null) }
+    var renameText by remember { mutableStateOf("") }
+    var deleteTarget by remember { mutableStateOf<ConversationEntity?>(null) }
+    var selectMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf(setOf<Int>()) }
+    var confirmDeleteSelected by remember { mutableStateOf(false) }
 
     val partial: String? = activeId?.let { generating[it] }
     val errorText: String? = activeId?.let { errors[it] }
@@ -308,47 +184,23 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     val lastAiId: Int? = messages.lastOrNull()?.takeIf { !it.isUser }?.id
     val totalItems = messages.size + (if (partial != null) 1 else 0) + (if (errorText != null) 1 else 0)
 
-    val attachmentMime = remember(attachmentUri) {
-        attachmentUri?.let { context.contentResolver.getType(it) } ?: ""
-    }
-    val attachmentName = remember(attachmentUri) {
-        attachmentUri?.let { queryDisplayName(context, it) } ?: ""
-    }
+    val attachmentMime = remember(attachmentUri) { attachmentUri?.let { context.contentResolver.getType(it) } ?: "" }
+    val attachmentName = remember(attachmentUri) { attachmentUri?.let { queryDisplayName(context, it) } ?: "" }
 
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) attachmentUri = uri
-    }
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) attachmentUri = uri
-    }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) attachmentUri = uri }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) attachmentUri = uri }
 
     val listState = rememberLazyListState()
 
     LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
-            if (!scrolling) stickToBottom = !listState.canScrollForward
-        }
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling -> if (!scrolling) stickToBottom = !listState.canScrollForward }
     }
     LaunchedEffect(activeId) { stickToBottom = true }
-    LaunchedEffect(partial, totalItems, activeId) {
-        if (stickToBottom && totalItems > 0) listState.scrollBy(100000f)
-    }
-
-    BackHandler(enabled = vm.isMultiSelectMode) {
-        vm.isMultiSelectMode = false
-        vm.selectedChatIds.clear()
-    }
+    LaunchedEffect(partial, totalItems, activeId) { if (stickToBottom && totalItems > 0) listState.scrollBy(100000f) }
 
     val send: () -> Unit = {
         if (!vm.canSend()) {
-            Toast.makeText(
-                context,
-                tr(
-                    "Connecting to the AI engine. Check your internet and try again.",
-                    "جارٍ الاتصال بمحرك الذكاء الاصطناعي. تحقق من الإنترنت وحاول مرة أخرى."
-                ),
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(context, tr("Connecting to the AI engine. Check your internet and try again.", "جارٍ الاتصال بمحرك الذكاء الاصطناعي. تحقق من الإنترنت وحاول مرة أخرى."), Toast.LENGTH_SHORT).show()
         } else {
             vm.sendMessage(input, attachmentUri)
             input = ""
@@ -357,18 +209,10 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
         }
     }
 
-    val filteredConversations = remember(conversations, query) {
-        if (query.isBlank()) conversations else conversations.filter { it.title.contains(query, ignoreCase = true) }
-    }
+    val filteredConversations = remember(conversations, query) { if (query.isBlank()) conversations else conversations.filter { it.title.contains(query, true) } }
     val pinned = remember(filteredConversations) { filteredConversations.filter { it.isPinned } }
     val recent = remember(filteredConversations) { filteredConversations.filter { !it.isPinned } }
-
-    val suggestions = listOf(
-        tr("Explain a complex idea simply", "اشرح لي فكرة معقدة ببساطة"),
-        tr("Help me write a message", "ساعدني في كتابة رسالة"),
-        tr("Plan my day step by step", "رتّب لي يومي خطوة بخطوة"),
-        tr("Write code for an idea", "اكتب كوداً لفكرة لدي")
-    )
+    val bucketLabels = listOf(tr("Today", "اليوم"), tr("Yesterday", "أمس"), tr("Last 7 days", "آخر 7 أيام"), tr("Older", "أقدم"))
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -376,12 +220,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
             ModalDrawerSheet(drawerContainerColor = DeepSurface, modifier = Modifier.width(300.dp)) {
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier.size(34.dp).background(AccentBlue, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("✦", color = Color.White, fontSize = 15.sp)
-                        }
+                        Box(Modifier.size(34.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) { Text("✦", color = OnAccent, fontSize = 15.sp) }
                         Spacer(Modifier.width(10.dp))
                         Text(tr("Hiyako", "هياكو"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
@@ -389,187 +228,62 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                     SearchField(query, { query = it }, tr("Search chats", "ابحث في المحادثات"))
                     Spacer(Modifier.height(12.dp))
                     Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(AccentBlue.copy(alpha = 0.15f))
-                            .clickable {
-                                vm.createNewConversation()
-                                scope.launch { drawerState.close() }
-                            }
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AccentBlue.copy(alpha = 0.15f)).clickable { vm.createNewConversation(); scope.launch { drawerState.close() } }.padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Default.Add, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(10.dp))
-                        Text(
-                            tr("New chat", "محادثة جديدة"),
-                            color = AccentBlue,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text(tr("New chat", "محادثة جديدة"), color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Spacer(Modifier.height(8.dp))
+                    if (selectMode) {
+                        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(tr("${selectedIds.size} selected", "${selectedIds.size} محددة"), color = TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { if (selectedIds.isNotEmpty()) confirmDeleteSelected = true }) { Icon(Icons.Default.Delete, tr("Delete", "حذف"), tint = DangerColor) }
+                            IconButton(onClick = { selectMode = false; selectedIds = emptySet() }) { Icon(Icons.Default.Close, tr("Cancel", "إلغاء"), tint = TextSecondary) }
+                        }
+                    }
 
                     LazyColumn(Modifier.weight(1f)) {
                         if (pinned.isNotEmpty()) {
-                            item(key = "header-pinned") { SectionLabel(tr("Pinned", "المثبتة")) }
+                            item { Text(tr("Pinned", "المثبتة"), color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp)) }
                             items(pinned, key = { "p${it.id}" }) { chat ->
-                                ConversationRow(
-                                    chat = chat,
-                                    active = chat.id == activeId,
-                                    multiSelect = vm.isMultiSelectMode,
-                                    selected = vm.selectedChatIds.contains(chat.id),
-                                    menuOpen = expandedMenuId == chat.id,
-                                    onOpen = {
-                                        if (vm.isMultiSelectMode) {
-                                            if (vm.selectedChatIds.contains(chat.id)) {
-                                                vm.selectedChatIds.remove(chat.id)
-                                            } else {
-                                                vm.selectedChatIds.add(chat.id)
-                                            }
-                                        } else {
-                                            vm.selectConversation(chat.id)
-                                            scope.launch { drawerState.close() }
-                                        }
+                                ChatRow(chat, chat.id == activeId,
+                                    onClick = {
+                                        if (selectMode) selectedIds = if (chat.id in selectedIds) selectedIds - chat.id else selectedIds + chat.id
+                                        else { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }
                                     },
-                                    onLongPress = {
-                                        if (!vm.isMultiSelectMode) {
-                                            vm.isMultiSelectMode = true
-                                            vm.selectedChatIds.clear()
-                                            vm.selectedChatIds.add(chat.id)
-                                        }
-                                    },
-                                    onToggleSelect = { checked ->
-                                        if (checked) vm.selectedChatIds.add(chat.id) else vm.selectedChatIds.remove(chat.id)
-                                    },
-                                    onMenu = { expandedMenuId = chat.id },
-                                    onDismissMenu = { expandedMenuId = null },
-                                    onRename = {
-                                        renameTarget = chat
-                                        expandedMenuId = null
-                                    },
-                                    onPin = {
-                                        vm.togglePin(chat.id, !chat.isPinned)
-                                        expandedMenuId = null
-                                    },
-                                    onDelete = {
-                                        deleteTargets = listOf(chat.id)
-                                        expandedMenuId = null
-                                    }
-                                )
+                                    onLongPress = { if (selectMode) selectedIds = selectedIds + chat.id else menuChat = chat },
+                                    selectMode = selectMode, selected = chat.id in selectedIds)
                             }
                         }
-                        if (recent.isNotEmpty()) {
-                            item(key = "header-recent") { SectionLabel(tr("Recent", "الأخيرة")) }
-                            items(recent, key = { "r${it.id}" }) { chat ->
-                                ConversationRow(
-                                    chat = chat,
-                                    active = chat.id == activeId,
-                                    multiSelect = vm.isMultiSelectMode,
-                                    selected = vm.selectedChatIds.contains(chat.id),
-                                    menuOpen = expandedMenuId == chat.id,
-                                    onOpen = {
-                                        if (vm.isMultiSelectMode) {
-                                            if (vm.selectedChatIds.contains(chat.id)) {
-                                                vm.selectedChatIds.remove(chat.id)
-                                            } else {
-                                                vm.selectedChatIds.add(chat.id)
-                                            }
-                                        } else {
-                                            vm.selectConversation(chat.id)
-                                            scope.launch { drawerState.close() }
-                                        }
+                        val grouped = recent.groupBy { dateBucket(it.timestamp) }.toSortedMap()
+                        grouped.forEach { (bucket, list) ->
+                            item { Text(bucketLabels[bucket], color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp)) }
+                            items(list, key = { "r${it.id}" }) { chat ->
+                                ChatRow(chat, chat.id == activeId,
+                                    onClick = {
+                                        if (selectMode) selectedIds = if (chat.id in selectedIds) selectedIds - chat.id else selectedIds + chat.id
+                                        else { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }
                                     },
-                                    onLongPress = {
-                                        if (!vm.isMultiSelectMode) {
-                                            vm.isMultiSelectMode = true
-                                            vm.selectedChatIds.clear()
-                                            vm.selectedChatIds.add(chat.id)
-                                        }
-                                    },
-                                    onToggleSelect = { checked ->
-                                        if (checked) vm.selectedChatIds.add(chat.id) else vm.selectedChatIds.remove(chat.id)
-                                    },
-                                    onMenu = { expandedMenuId = chat.id },
-                                    onDismissMenu = { expandedMenuId = null },
-                                    onRename = {
-                                        renameTarget = chat
-                                        expandedMenuId = null
-                                    },
-                                    onPin = {
-                                        vm.togglePin(chat.id, !chat.isPinned)
-                                        expandedMenuId = null
-                                    },
-                                    onDelete = {
-                                        deleteTargets = listOf(chat.id)
-                                        expandedMenuId = null
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    if (vm.isMultiSelectMode) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            TextButton(onClick = {
-                                vm.isMultiSelectMode = false
-                                vm.selectedChatIds.clear()
-                            }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) }
-                            TextButton(onClick = {
-                                vm.selectedChatIds.toList().forEach { vm.togglePin(it, true) }
-                                vm.isMultiSelectMode = false
-                                vm.selectedChatIds.clear()
-                            }) { Text(tr("Pin", "تثبيت"), color = TextSecondary) }
-                            TextButton(onClick = {
-                                if (vm.selectedChatIds.isNotEmpty()) deleteTargets = vm.selectedChatIds.toList()
-                            }) {
-                                Text(
-                                    tr("Delete", "حذف") + " (" + vm.selectedChatIds.size + ")",
-                                    color = Color.Red
-                                )
+                                    onLongPress = { if (selectMode) selectedIds = selectedIds + chat.id else menuChat = chat },
+                                    selectMode = selectMode, selected = chat.id in selectedIds)
                             }
                         }
                     }
 
                     HorizontalDivider(color = BorderColor)
                     Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable {
-                                scope.launch { drawerState.close() }
-                                onNavigateToSettings()
-                            }
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { scope.launch { drawerState.close() }; onNavigateToSettings() }.padding(vertical = 12.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            Modifier.size(36.dp).background(AccentBlue, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                auth.username.firstOrNull()?.uppercase() ?: "?",
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                        Box(Modifier.size(36.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
+                            Text(auth.username.firstOrNull()?.uppercase() ?: "?", color = OnAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(tr("Settings", "الإعدادات"), color = TextPrimary, fontSize = 15.sp)
-                            Text(
-                                if (auth.signedIn) {
-                                    if (auth.username.isNotEmpty()) auth.username else tr("Signed in", "مسجّل الدخول")
-                                } else {
-                                    tr("Not signed in", "غير مسجّل الدخول")
-                                },
-                                color = TextMuted,
-                                fontSize = 11.sp
-                            )
+                            Text(tr("Manage account", "إدارة الحساب"), color = TextMuted, fontSize = 11.sp)
                         }
                         Icon(Icons.Default.Settings, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
                     }
@@ -579,198 +293,68 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     ) {
         Scaffold(
             containerColor = OledBlack,
-            modifier = Modifier.imePadding().fillMaxSize(),
             topBar = {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                        Icon(Icons.Default.Menu, tr("Menu", "القائمة"), tint = TextPrimary, modifier = Modifier.size(24.dp))
-                    }
-                    Column(
-                        Modifier.weight(1f).clickable { showModelSheet = true },
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            chatTitle,
-                            color = TextPrimary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, tr("Menu", "القائمة"), tint = TextPrimary) }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(chatTitle, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Row(
-                            Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(ElevatedSurface)
-                                .padding(horizontal = 10.dp, vertical = 3.dp),
+                            Modifier.clip(RoundedCornerShape(10.dp)).clickable { showModelSheet = true }.padding(horizontal = 8.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                selectedModel.name.ifBlank { tr("Auto", "تلقائي") },
-                                color = AccentBlue,
-                                fontSize = 11.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                            Icon(Icons.Default.ArrowDropDown, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                            Text(selectedModel.name, color = AccentBlue, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp))
+                            Icon(Icons.Default.KeyboardArrowDown, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
                         }
                     }
-                    IconButton(onClick = { vm.createNewConversation() }) {
-                        Icon(Icons.Default.Add, tr("New chat", "محادثة جديدة"), tint = TextPrimary, modifier = Modifier.size(24.dp))
-                    }
-                    Box {
-                        IconButton(onClick = { showTopMenu = true }) {
-                            Icon(Icons.Default.MoreVert, tr("More", "المزيد"), tint = TextPrimary, modifier = Modifier.size(24.dp))
-                        }
-                        DropdownMenu(expanded = showTopMenu, onDismissRequest = { showTopMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text(tr("Export chat", "تصدير المحادثة")) },
-                                onClick = {
-                                    showTopMenu = false
-                                    val exported = messages.joinToString("\n\n") { m ->
-                                        (if (m.isUser) tr("You", "أنت") else "AI") + ":\n" + m.content
-                                    }
-                                    if (exported.isBlank()) {
-                                        Toast.makeText(
-                                            context,
-                                            tr("Nothing to export yet", "لا توجد رسائل بعد"),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } else {
-                                        chatShareText(context, exported)
-                                    }
-                                }
-                            )
-                        }
-                    }
+                    IconButton(onClick = { vm.createNewConversation() }) { Icon(Icons.Default.Add, tr("New chat", "محادثة جديدة"), tint = TextPrimary) }
                 }
             },
             bottomBar = {
                 Column(Modifier.background(OledBlack)) {
                     if (attachmentUri != null) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp)
-                                .background(SecondarySurface, RoundedCornerShape(14.dp))
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).background(SecondarySurface, RoundedCornerShape(14.dp)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (attachmentMime.startsWith("image/")) {
-                                AsyncImage(
-                                    model = attachmentUri,
-                                    contentDescription = tr("Attachment", "المرفق"),
-                                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
+                                AsyncImage(model = attachmentUri, contentDescription = "Attachment", modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
                             } else {
                                 Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
                             }
                             Spacer(Modifier.width(10.dp))
-                            Text(
-                                attachmentName,
-                                color = TextPrimary,
-                                fontSize = 13.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(onClick = { attachmentUri = null }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Close, tr("Remove", "إزالة"), tint = TextSecondary, modifier = Modifier.size(18.dp))
-                            }
+                            Text(attachmentName, color = TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { attachmentUri = null }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Close, tr("Remove", "إزالة"), tint = TextSecondary, modifier = Modifier.size(18.dp)) }
                         }
                     }
                     ComposerBar(
-                        input = input,
-                        onInputChange = { input = it },
-                        onSend = send,
-                        onStop = { vm.stopGeneration() },
-                        isGenerating = isGenerating,
-                        canSend = input.isNotBlank() || attachmentUri != null,
-                        onAttachClick = { showAttachmentSheet = true },
-                        isThinking = vm.isThinkingMode,
-                        onThinkClick = { vm.toggleThink() },
-                        isSearch = vm.isSearchMode,
-                        onSearchClick = { vm.toggleSearch() }
+                        input = input, onInputChange = { input = it }, onSend = send, onStop = { vm.stopGeneration() },
+                        isGenerating = isGenerating, canSend = input.isNotBlank() || attachmentUri != null, onAttachClick = { showAttachmentSheet = true },
+                        isThinking = vm.isThinkingMode, onThinkClick = { vm.toggleThink() }, isSearch = vm.isSearchMode, onSearchClick = { vm.toggleSearch() }
                     )
                 }
             }
         ) { padding ->
-            Box(Modifier.padding(padding).fillMaxSize().background(OledBlack)) {
+            Box(Modifier.padding(padding).fillMaxSize()) {
                 if (messages.isEmpty() && partial == null && errorText == null) {
-                    Column(
-                        Modifier.fillMaxSize().padding(horizontal = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Box(
-                            Modifier.size(64.dp).background(AccentBlue, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("✦", color = Color.White, fontSize = 26.sp)
-                        }
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            tr("How can I help you today?", "كيف أقدر أساعدك اليوم؟"),
-                            color = TextPrimary,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(24.dp))
-                        suggestions.chunked(2).forEach { pair ->
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                pair.forEach { suggestion ->
-                                    SuggestionCard(
-                                        title = suggestion,
-                                        onClick = { input = suggestion },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                                if (pair.size < 2) Spacer(Modifier.weight(1f))
-                            }
-                            Spacer(Modifier.height(10.dp))
-                        }
-                    }
+                    EmptyChat(onPick = { input = it })
                 } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 12.dp)
-                    ) {
-                        items(messages, key = { it.id }) { msg ->
-                            if (msg.isUser) {
-                                UserMessage(
-                                    text = msg.content,
-                                    type = msg.type,
-                                    attachmentUri = msg.attachmentUri,
-                                    attachmentName = msg.senderName
-                                )
-                            } else {
-                                AssistantMessage(
-                                    text = msg.content,
-                                    showRegenerate = msg.id == lastAiId && !isGenerating,
-                                    onRegenerate = { vm.regenerate() },
-                                    onSpeak = { vm.speak(msg.content) },
-                                    onReport = { vm.reportMessage(msg.id, msg.content) }
-                                )
+                    Box(Modifier.fillMaxSize()) {
+                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 12.dp)) {
+                            items(messages, key = { it.id }) { msg ->
+                                if (msg.isUser) UserMessage(msg.content, msg.type, msg.attachmentUri, msg.senderName)
+                                else AssistantMessage(msg.content, showRegenerate = msg.id == lastAiId && !isGenerating, onRegenerate = { vm.regenerate() }, onSpeak = { vm.speak(msg.content) }, onReport = { vm.reportMessage(msg.id, msg.content) })
+                            }
+                            if (partial != null) {
+                                item(key = "generating") { if (partial.isEmpty()) TypingDots() else AssistantMessage(text = partial, showActions = false) }
+                            }
+                            if (errorText != null) {
+                                item(key = "error") { ErrorCard(message = errorText, onRetry = { vm.regenerate() }) }
                             }
                         }
-                        if (partial != null) {
-                            item(key = "generating") {
-                                if (partial.isEmpty()) {
-                                    TypingDots()
-                                } else {
-                                    AssistantMessage(text = partial, showActions = false)
-                                }
-                            }
-                        }
-                        if (errorText != null) {
-                            item(key = "error") {
-                                ErrorCard(message = errorText, onRetry = { vm.regenerate() })
+                        val showJump by remember { derivedStateOf { listState.canScrollForward } }
+                        AnimatedVisibility(
+                            visible = showJump, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut(),
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
+                        ) {
+                            SmallFloatingActionButton(onClick = { scope.launch { listState.scrollToItem((totalItems - 1).coerceAtLeast(0)); listState.scrollBy(100000f); stickToBottom = true } }, containerColor = ElevatedSurface, contentColor = TextPrimary) {
+                                Icon(Icons.Default.KeyboardArrowDown, tr("Scroll to bottom", "الانتقال للأسفل"))
                             }
                         }
                     }
@@ -779,98 +363,94 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
         }
     }
 
-    if (showAttachmentSheet) {
-        ModalBottomSheet(onDismissRequest = { showAttachmentSheet = false }, containerColor = CardDark) {
-            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.clickable {
-                        showAttachmentSheet = false
-                        imagePicker.launch("image/*")
-                    }.padding(16.dp)
-                ) {
-                    Icon(Icons.Default.Image, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
-                    Text(tr("Image", "صورة"), color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-                }
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.clickable {
-                        showAttachmentSheet = false
-                        filePicker.launch("*/*")
-                    }.padding(16.dp)
-                ) {
-                    Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
-                    Text(tr("File", "ملف"), color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+    if (showModelSheet) {
+        val accountLabels = remember(models) { AccountStore.load(context).associate { it.id to it.label } }
+        ModalBottomSheet(onDismissRequest = { showModelSheet = false }, containerColor = CardDark) {
+            Text(tr("Choose a model", "اختر النموذج"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            LazyColumn(Modifier.heightIn(max = 460.dp).padding(horizontal = 12.dp)) {
+                items(models, key = { it.accountId + "|" + it.id }) { m ->
+                    val isSelected = m.id == selectedModel.id && m.accountId == selectedModel.accountId
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.selectModel(m); showModelSheet = false }.padding(horizontal = 10.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(m.name, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(if (m.accountId.isEmpty()) "Puter" else accountLabels[m.accountId] ?: m.accountId, color = TextMuted, fontSize = 11.sp)
+                        }
+                        if (isSelected) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))
         }
     }
 
-    if (showModelSheet) {
-        ModelPickerSheet(
-            models = models,
-            selectedId = selectedModel.id,
-            onSelect = {
-                vm.selectModel(it)
-                showModelSheet = false
-            },
-            onRefresh = { vm.refreshModels() },
-            onDismiss = { showModelSheet = false }
-        )
+    menuChat?.let { chat ->
+        ModalBottomSheet(onDismissRequest = { menuChat = null }, containerColor = CardDark) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+                Text(chat.title, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(8.dp))
+                SheetAction(Icons.Default.Edit, tr("Rename", "إعادة التسمية")) { renameText = chat.title; renameTarget = chat; menuChat = null }
+                SheetAction(Icons.Default.PushPin, if (chat.isPinned) tr("Unpin", "إلغاء التثبيت") else tr("Pin", "تثبيت")) { vm.togglePin(chat.id, !chat.isPinned); menuChat = null }
+                SheetAction(Icons.Default.Share, tr("Export chat", "تصدير المحادثة")) {
+                    menuChat = null
+                    scope.launch {
+                        val exported = vm.exportChatText(chat.id)
+                        if (exported.isBlank()) Toast.makeText(context, tr("Nothing to export yet", "لا توجد رسائل بعد"), Toast.LENGTH_SHORT).show()
+                        else chatShareText(context, exported)
+                    }
+                }
+                SheetAction(Icons.Default.CheckCircle, tr("Select multiple", "تحديد متعدد")) { selectMode = true; selectedIds = setOf(chat.id); menuChat = null }
+                SheetAction(Icons.Default.Delete, tr("Delete", "حذف"), danger = true) { deleteTarget = chat; menuChat = null }
+            }
+        }
     }
 
-    val renaming = renameTarget
-    if (renaming != null) {
-        var newTitle by remember(renaming.id) { mutableStateOf(renaming.title) }
+    renameTarget?.let { chat ->
         AlertDialog(
             onDismissRequest = { renameTarget = null },
             containerColor = CardDark,
-            titleContentColor = TextPrimary,
-            textContentColor = TextSecondary,
-            title = { Text(tr("Rename chat", "إعادة تسمية المحادثة")) },
-            text = {
-                OutlinedTextField(value = newTitle, onValueChange = { newTitle = it }, singleLine = true)
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.renameChat(renaming.id, newTitle)
-                    renameTarget = null
-                }) { Text(tr("Save", "حفظ"), color = AccentBlue) }
-            },
-            dismissButton = {
-                TextButton(onClick = { renameTarget = null }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) }
-            }
+            title = { Text(tr("Rename chat", "إعادة تسمية المحادثة"), color = TextPrimary) },
+            text = { OutlinedTextField(value = renameText, onValueChange = { renameText = it }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
+            confirmButton = { TextButton(onClick = { vm.renameChat(chat.id, renameText); renameTarget = null }) { Text(tr("Save", "حفظ"), color = AccentBlue) } },
+            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
         )
     }
 
-    val toDelete = deleteTargets
-    if (toDelete != null) {
-        AlertDialog(
-            onDismissRequest = { deleteTargets = null },
-            containerColor = CardDark,
-            titleContentColor = TextPrimary,
-            textContentColor = TextSecondary,
-            title = { Text(tr("Delete chat", "حذف المحادثة")) },
-            text = {
-                Text(
-                    tr(
-                        "Delete ${toDelete.size} chat(s)? This cannot be undone.",
-                        "حذف ${toDelete.size} محادثة؟ لا يمكن التراجع عن ذلك."
-                    )
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    toDelete.forEach { vm.deleteChat(it) }
-                    vm.isMultiSelectMode = false
-                    vm.selectedChatIds.clear()
-                    deleteTargets = null
-                }) { Text(tr("Delete", "حذف"), color = Color.Red) }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteTargets = null }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) }
-            }
+    deleteTarget?.let { chat ->
+        ConfirmDialog(
+            title = tr("Delete this chat?", "حذف هذه المحادثة؟"),
+            message = tr("\"${chat.title}\" will be deleted. It cannot be undone.", "سيتم حذف \"${chat.title}\". لا يمكن التراجع."),
+            confirmLabel = tr("Delete", "حذف"), danger = true,
+            onConfirm = { vm.deleteChat(chat.id); deleteTarget = null },
+            onDismiss = { deleteTarget = null }
         )
+    }
+
+    if (confirmDeleteSelected) {
+        ConfirmDialog(
+            title = tr("Delete ${selectedIds.size} chats?", "حذف ${selectedIds.size} محادثات؟"),
+            message = tr("The selected chats will be deleted. It cannot be undone.", "سيتم حذف المحادثات المحددة. لا يمكن التراجع."),
+            confirmLabel = tr("Delete", "حذف"), danger = true,
+            onConfirm = { selectedIds.forEach { vm.deleteChat(it) }; selectedIds = emptySet(); selectMode = false; confirmDeleteSelected = false },
+            onDismiss = { confirmDeleteSelected = false }
+        )
+    }
+
+    if (showAttachmentSheet) {
+        ModalBottomSheet(onDismissRequest = { showAttachmentSheet = false }, containerColor = CardDark) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { showAttachmentSheet = false; imagePicker.launch("image/*") }.padding(16.dp)) {
+                    Icon(Icons.Default.Image, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
+                    Text(tr("Image", "صورة"), color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { showAttachmentSheet = false; filePicker.launch("*/*") }.padding(16.dp)) {
+                    Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(32.dp))
+                    Text(tr("File", "ملف"), color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
     }
 }

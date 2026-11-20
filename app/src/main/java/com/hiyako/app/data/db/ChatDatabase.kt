@@ -11,18 +11,18 @@ data class ConversationEntity(
     val timestamp: Long = System.currentTimeMillis(),
     val isPinned: Boolean = false,
     val isGroup: Boolean = false,
-    val groupModelsJson: String = "[]" // تخزين النماذج المشاركة في القروب
+    val groupModelsJson: String = "[]"
 )
 
 @Entity(tableName = "chat_messages")
 data class ChatEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val conversationId: Int,
-    val role: String, // "user", "ai", "system"
+    val role: String,
     val content: String,
-    val messageType: String = "TEXT", // "TEXT", "IMAGE", "FILE", "AUDIO", "VIDEO"
+    val messageType: String = "TEXT",
     val attachmentUri: String? = null,
-    val senderName: String? = null, // اسم النموذج في القروب / اسم الملف المرفق
+    val senderName: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -41,20 +41,10 @@ interface ChatDao {
     @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC")
     suspend fun getMessagesOnce(conversationId: Int): List<ChatEntity>
 
-    @Insert
-    suspend fun insertMessage(message: ChatEntity)
-
-    @Query("DELETE FROM chat_messages WHERE id = :messageId")
-    suspend fun deleteMessage(messageId: Int)
-
-    @Query("DELETE FROM chat_messages WHERE role = 'ai' AND content = 'Thinking...' AND conversationId = :conversationId")
-    suspend fun deleteThinkingMessage(conversationId: Int)
-
-    @Query("DELETE FROM chat_messages WHERE conversationId = :conversationId")
-    suspend fun clearChat(conversationId: Int)
-
-    @Query("DELETE FROM chat_messages")
-    suspend fun clearAllMessages()
+    @Insert suspend fun insertMessage(message: ChatEntity)
+    @Query("DELETE FROM chat_messages WHERE id = :messageId") suspend fun deleteMessage(messageId: Int)
+    @Query("DELETE FROM chat_messages WHERE conversationId = :conversationId") suspend fun clearChat(conversationId: Int)
+    @Query("DELETE FROM chat_messages") suspend fun clearAllMessages()
 }
 
 @Dao
@@ -62,23 +52,12 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations ORDER BY isPinned DESC, timestamp DESC")
     fun getAllConversations(): Flow<List<ConversationEntity>>
 
-    @Insert
-    suspend fun insertConversation(conversation: ConversationEntity): Long
-
-    @Query("UPDATE conversations SET title = :newTitle WHERE id = :conversationId")
-    suspend fun updateTitle(conversationId: Int, newTitle: String)
-
-    @Query("UPDATE conversations SET isPinned = :isPinned WHERE id = :conversationId")
-    suspend fun updatePin(conversationId: Int, isPinned: Boolean)
-
-    @Query("UPDATE conversations SET timestamp = :timestamp WHERE id = :conversationId")
-    suspend fun touch(conversationId: Int, timestamp: Long)
-
-    @Query("DELETE FROM conversations WHERE id = :conversationId")
-    suspend fun deleteConversation(conversationId: Int)
-
-    @Query("DELETE FROM conversations")
-    suspend fun deleteAllConversations()
+    @Insert suspend fun insertConversation(conversation: ConversationEntity): Long
+    @Query("UPDATE conversations SET title = :newTitle WHERE id = :conversationId") suspend fun updateTitle(conversationId: Int, newTitle: String)
+    @Query("UPDATE conversations SET isPinned = :isPinned WHERE id = :conversationId") suspend fun updatePin(conversationId: Int, isPinned: Boolean)
+    @Query("UPDATE conversations SET timestamp = :timestamp WHERE id = :conversationId") suspend fun touch(conversationId: Int, timestamp: Long)
+    @Query("DELETE FROM conversations WHERE id = :conversationId") suspend fun deleteConversation(conversationId: Int)
+    @Query("DELETE FROM conversations") suspend fun deleteAllConversations()
 }
 
 @Dao
@@ -86,11 +65,9 @@ interface MemoryDao {
     @Query("SELECT * FROM memories ORDER BY timestamp DESC")
     fun getAllMemories(): Flow<List<MemoryEntity>>
 
-    @Insert
-    suspend fun insertMemory(memory: MemoryEntity)
-
-    @Query("DELETE FROM memories")
-    suspend fun clearMemories()
+    @Insert suspend fun insertMemory(memory: MemoryEntity)
+    @Query("DELETE FROM memories WHERE id = :id") suspend fun deleteMemory(id: Int)
+    @Query("DELETE FROM memories") suspend fun clearMemories()
 }
 
 @Database(entities = [ChatEntity::class, ConversationEntity::class, MemoryEntity::class, ReportEntity::class], version = 5, exportSchema = false)

@@ -30,7 +30,12 @@ data class AppPalette(
     val textSecondary: Color,
     val textMuted: Color,
     val accent: Color,
-    val onAccent: Color
+    val onAccent: Color,
+    val danger: Color = Color(0xFFF87171),
+    val success: Color = Color(0xFF34D399),
+    val warning: Color = Color(0xFFFBBF24),
+    val codeBackground: Color = Color(0xFF0D0D10),
+    val codeHeader: Color = Color(0xFF17171C)
 )
 
 object AppPalettes {
@@ -38,7 +43,7 @@ object AppPalettes {
         id = "obsidian", name = "Obsidian", dark = true,
         surface = Color(0xFF0A0A0A), secondary = Color(0xFF141414),
         elevated = Color(0xFF1B1B1B), userBubble = Color(0xFF2A2A2A), border = Color(0xFF27272A),
-        textPrimary = Color(0xFFFFFFFF), textSecondary = Color(0xFFA1A1AA), textMuted = Color(0xFF71717A),
+        textPrimary = Color(0xFFFFFFFF), textSecondary = Color(0xFFA1A1AA), textMuted = Color(0xFF8B8B94),
         accent = Color(0xFF8B5CF6), onAccent = Color(0xFFFFFFFF)
     )
     val midnight = AppPalette(
@@ -74,7 +79,9 @@ object AppPalettes {
         surface = Color(0xFFF8FAFC), secondary = Color(0xFFF1F5F9),
         elevated = Color(0xFFE2E8F0), userBubble = Color(0xFFE2E8F0), border = Color(0xFFCBD5E1),
         textPrimary = Color(0xFF0F172A), textSecondary = Color(0xFF475569), textMuted = Color(0xFF64748B),
-        accent = Color(0xFF4F46E5), onAccent = Color(0xFFFFFFFF)
+        accent = Color(0xFF4F46E5), onAccent = Color(0xFFFFFFFF),
+        codeBackground = Color(0xFFF1F5F9), codeHeader = Color(0xFFE2E8F0),
+        danger = Color(0xFFDC2626)
     )
 
     val all: List<AppPalette> = listOf(obsidian, midnight, ember, forest, rose, paper)
@@ -102,6 +109,7 @@ object ThemeState {
     }
 }
 
+// الثيم الداكن: خلفية سوداء دائماً إلا في Paper
 val OledBlack: Color get() = if (ThemeState.palette.id == "paper") Color(0xFFFFFFFF) else Color(0xFF000000)
 val DeepSurface: Color get() = ThemeState.palette.surface
 val SecondarySurface: Color get() = ThemeState.palette.secondary
@@ -113,6 +121,11 @@ val TextSecondary: Color get() = ThemeState.palette.textSecondary
 val TextMuted: Color get() = ThemeState.palette.textMuted
 val CardDark: Color get() = ThemeState.palette.secondary
 val AccentBlue: Color get() = ThemeState.palette.accent
+val OnAccent: Color get() = ThemeState.palette.onAccent
+val DangerColor: Color get() = ThemeState.palette.danger
+val SuccessColor: Color get() = ThemeState.palette.success
+val CodeBg: Color get() = ThemeState.palette.codeBackground
+val CodeHeader: Color get() = ThemeState.palette.codeHeader
 
 @Composable
 fun AppTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
