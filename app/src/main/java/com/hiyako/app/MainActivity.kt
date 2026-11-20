@@ -8,16 +8,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -25,6 +21,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
@@ -38,7 +37,9 @@ import com.hiyako.app.ui.screens.*
 import com.hiyako.app.ui.theme.AppTheme
 import com.hiyako.app.ui.theme.OledBlack
 import com.hiyako.app.ui.theme.TextPrimary
+import com.hiyako.app.ui.theme.AccentBlue
 import com.hiyako.app.ui.i18n.Lang
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
@@ -66,7 +67,24 @@ class MainActivity : ComponentActivity() {
             CompositionLocalProvider(LocalDensity provides Density(density.density, aiViewModel.fontSize)) {
                 AppTheme(darkTheme = darkTheme) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        AppRoot(aiViewModel)
+                        var showApp by remember { mutableStateOf(false) }
+                        var showSplash by remember { mutableStateOf(true) }
+
+                        LaunchedEffect(Unit) {
+                            delay(1800) // Splash duration
+                            showSplash = false
+                            delay(300) // Crossfade duration
+                            showApp = true
+                        }
+
+                        Box(Modifier.fillMaxSize()) {
+                            if (showApp) {
+                                AppRoot(aiViewModel)
+                            }
+                            if (showSplash) {
+                                AnimatedSplashScreen()
+                            }
+                        }
                     }
                 }
             }
@@ -75,9 +93,45 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+private fun AnimatedSplashScreen() {
+    val scale = remember { Animatable(0.5f) }
+    val alpha = remember { Animatable(0f) }
+    
+    LaunchedEffect(Unit) {
+        scale.animateTo(1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+        alpha.animateTo(1f, animationSpec = tween(600))
+    }
+
+    Box(Modifier.fillMaxSize().background(OledBlack), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(120.dp).scale(scale.value).alpha(alpha.value),
+                contentAlignment = Alignment.Center
+            ) {
+                // Glow
+                Box(Modifier.size(160.dp).background(Brush.radialGradient(listOf(AccentBlue.copy(alpha = 0.3f), Color.Transparent))))
+                // Logo Circle
+                Box(Modifier.size(100.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
+                    Text("H", color = Color.White, fontSize = 50.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Hiyako",
+                color = TextPrimary,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.alpha(alpha.value)
+            )
+        }
+    }
+}
+
+@Composable
 private fun AppRoot(vm: AiViewModel) {
     var screenState by remember { mutableStateOf("chat") }
     var showEngineHost by remember { mutableStateOf(false) }
+    val isSigningIn by vm.isSigningIn.collectAsState()
 
     LaunchedEffect(Unit) {
         androidx.compose.runtime.withFrameNanos { }
@@ -115,7 +169,7 @@ private fun AppRoot(vm: AiViewModel) {
                     onNavigateToWorkspace = { screenState = "workspace" },
                     onNavigateToUpdater = { screenState = "updater" },
                     onNavigateToMemory = { screenState = "memory" },
-                    onSignIn = { vm.signIn() }, // Removed screenState = "chat" to prevent Puter bug
+                    onSignIn = { vm.signIn() },
                     onClearChat = { vm.clearAllChats() },
                     vm = vm
                 )
@@ -125,6 +179,19 @@ private fun AppRoot(vm: AiViewModel) {
 
         if (showEngineHost) {
             EngineHost(vm)
+        }
+
+        // Global Loading Overlay for Puter Sign In
+        if (isSigningIn) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface) {
+                    Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = AccentBlue)
+                        Spacer(Modifier.height(16.dp))
+                        Text("Connecting to Puter...", color = TextPrimary)
+                    }
+                }
+            }
         }
     }
 }

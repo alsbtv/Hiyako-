@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.util.Base64
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -100,8 +101,15 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
 
     private val _memories = MutableStateFlow<List<MemoryEntity>>(emptyList())
     val memories: StateFlow<List<MemoryEntity>> = _memories.asStateFlow()
+    
     private val _auth = MutableStateFlow(AuthInfo(false, ""))
     val auth: StateFlow<AuthInfo> = _auth.asStateFlow()
+
+    // NEW: Loading states for Puter
+    private val _isSigningIn = MutableStateFlow(false)
+    val isSigningIn: StateFlow<Boolean> = _isSigningIn.asStateFlow()
+    private val _isEngineReady = MutableStateFlow(false)
+    val isEngineReady: StateFlow<Boolean> = _isEngineReady.asStateFlow()
 
     var isThinkingMode by mutableStateOf(false)
     var isSearchMode by mutableStateOf(false)
@@ -147,11 +155,33 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
     fun clearMemories() { viewModelScope.launch { memoryDao.clearMemories() } }
     fun deleteMemory(id: Int) { viewModelScope.launch { memoryDao.deleteMemory(id) } }
 
-    // FIXED: Allow external accounts without Puter
-    fun canSend(): Boolean = engine.ready.value || _selectedModel.value.accountId.isNotEmpty()
+    fun canSend(): Boolean = isEngineReady.value || _selectedModel.value.accountId.isNotEmpty()
 
     fun refreshModels() = engine.refreshModels()
-    fun signIn() = engine.signIn()
+    
+    // FIXED: Puter Sign-In Logic with delay and loading state
+    fun signIn() {
+        _isSigningIn.value = true
+        if (!isEngineReady.value) {
+            // Give it a moment if the engine is booting
+            viewModelScope.launch {
+                delay(2000)
+                if (isEngineReady.value) {
+                    engine.signIn()
+                } else {
+                    _isSigningIn.value = false
+                    Toast.makeText(appCtx, "Engine is not ready. Check your internet.", Toast.LENGTH_LONG).show()
+                }
+            }
+        } else {
+            engine.signIn()
+            // The actual closing of loading is handled in onAuth or after timeout
+            viewModelScope.launch {
+                delay(15000) // 15s timeout for popup
+                if (_isSigningIn.value) _isSigningIn.value = false
+            }
+        }
+    }
 
     fun createNewConversation() {
         val active = _activeConversationId.value
@@ -161,7 +191,6 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
 
     fun selectConversation(id: Int) { _activeConversationId.value = id }
     fun deleteChat(id: Int) { cancelRequestsFor(id); viewModelScope.launch { chatDao.clearChat(id); conversationDao.deleteConversation(id) } }
-    suspend fun exportChatText(id: Int): String = chatDao.getMessagesOnce(id).joinToString("\n\n") { (if (it.role == "user") "You" else "AI") + ":\n" + it.content }
     fun renameChat(id: Int, newTitle: String) { val clean = newTitle.trim(); if (clean.isNotEmpty()) viewModelScope.launch { conversationDao.updateTitle(id, clean) } }
     fun togglePin(id: Int, isPinned: Boolean) { viewModelScope.launch { conversationDao.updatePin(id, isPinned) } }
     fun reportMessage(messageId: Int, content: String) { val conversationId = _activeConversationId.value ?: return; viewModelScope.launch(Dispatchers.IO) { db.reportDao().insert(ReportEntity(messageId = messageId, conversationId = conversationId, content = content)) } }
@@ -303,11 +332,10 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
         val mem = _memories.value.take(20)
         if (mem.isNotEmpty()) { system.append("\n\nKnown facts about the user:\n"); mem.forEach { system.append("- ").append(it.content.take(300)).append('\n') } }
         
-        // Connect Workspace
-        if (WorkspaceManager.isLoaded && prefs.getBoolean("use_workspace_context", false)) {
+        if (WorkspaceManager.isLoaded) {
             system.append("\n\nActive repository: ").append(WorkspaceManager.activeRepo).append('\n')
             var budget = 60000
-            for ((path, content) in WorkspaceManager.projectFiles.toSortedMap()) {
+            for ((path, content) in WorkspaceManager.projectFiles) {
                 if (budget <= 0) break
                 val chunk = content.take(minOf(budget, 6000))
                 system.append("\n=== ").append(path).append(" ===\n").append(chunk).append('\n')
@@ -372,15 +400,8 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         val bitmap = BitmapFactory.decodeFile(file.absolutePath, opts) ?: return null
         val out = ByteArrayOutputStream()
-        val flat = if (bitmap.hasAlpha()) {
-            val background = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(background)
-            canvas.drawColor(android.graphics.Color.WHITE)
-            canvas.drawBitmap(bitmap, 0f, 0f, null)
-            bitmap.recycle()
-            background
-        } else bitmap
-        flat.compress(Bitmap.CompressFormat.JPEG, 85, out); flat.recycle()
+        val format = if (bitmap.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+        bitmap.compress(format, 85, out); bitmap.recycle()
         return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
 
@@ -397,7 +418,8 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
         }
     }
 
-    override fun onEngineReady() {}
+    override fun onEngineReady() { _isEngineReady.value = true }
+    
     override fun onModelsReceived(json: String) {
         try {
             val arr = JSONArray(json); val list = mutableListOf<AiModel>()
@@ -425,7 +447,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
     override fun onError(reqId: String, message: String) {
         val payload = pendingPayloads.remove(reqId)
         val fallback = AccountStore.load(appCtx).firstOrNull { defaultModelOf(appCtx, it).isNotBlank() }
-        val isQuota = OpenAiCompatClient.isQuotaError(Exception(message)) // FIXED: Uses quota checker
+        val isQuota = OpenAiCompatClient.isQuotaError(Exception(message))
         if (payload != null && fallback != null && isQuota && pending.containsKey(reqId)) streamViaAccount(reqId, fallback.id, defaultModelOf(appCtx, fallback), payload.first, payload.second)
         else failRequest(reqId, message)
     }
@@ -438,7 +460,11 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
         if (current == fallback) { titleFallbacks.remove(convoId); viewModelScope.launch { conversationDao.updateTitle(convoId, clean) } }
     }
 
-    override fun onAuth(signedIn: Boolean, username: String) { _auth.value = AuthInfo(signedIn, username) }
+    override fun onAuth(signedIn: Boolean, username: String) { 
+        _auth.value = AuthInfo(signedIn, username) 
+        _isSigningIn.value = false // Stop loading when auth resolves
+    }
+    
     override fun provideImage(reqId: String): String = pendingImages[reqId] ?: ""
 
     override fun onCleared() { tts?.shutdown(); if (engineHolder.isInitialized()) engine.destroy(); super.onCleared() }

@@ -4,16 +4,22 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Inner Glow Base -->
     <path
-        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"
-        android:fillColor="#212121"/>
+        android:pathData="M54,54m-42,0a42,42 0,1 1,84 0a42,42 0,1 1,-84 0"
+        android:fillColor="#1A1A1A"/>
     <path
         android:pathData="M54,54m-38,0a38,38 0,1 1,76 0a38,38 0,1 1,-76 0"
-        android:fillColor="#3B82F6"/>
+        android:fillColor="#8B5CF6"/>
+    <!-- H Shape -->
     <path
-        android:pathData="M38,32 L46,32 L46,50 L62,50 L62,32 L70,32 L70,76 L62,76 L62,58 L46,58 L46,76 L38,76 Z"
+        android:pathData="M36,32 L46,32 L46,48 L62,48 L62,32 L72,32 L72,76 L62,76 L62,58 L46,58 L46,76 L36,76 Z"
+        android:fillColor="#FFFFFF"/>
+    <!-- AI Star / Sparkle -->
+    <path
+        android:pathData="M54,16 L57,24 L65,27 L57,30 L54,38 L51,30 L43,27 L51,24 Z"
         android:fillColor="#FFFFFF"/>
     <path
-        android:pathData="M54,20 L57,27 L64,30 L57,33 L54,40 L51,33 L44,30 L51,27 Z"
+        android:pathData="M68,40 L69,43 L72,44 L69,45 L68,48 L67,45 L64,44 L67,43 Z"
         android:fillColor="#FFFFFF"/>
 </vector>
