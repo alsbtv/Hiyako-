@@ -398,7 +398,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                 SheetAction(Icons.Default.Share, tr("Export chat", "تصدير المحادثة")) {
                     menuChat = null
                     scope.launch {
-                        val exported = vm.exportChatText(chat.id)
+                        val exported = vm.chatShareText(chat.id)
                         if (exported.isBlank()) Toast.makeText(context, tr("Nothing to export yet", "لا توجد رسائل بعد"), Toast.LENGTH_SHORT).show()
                         else chatShareText(context, exported)
                     }
