@@ -3,6 +3,7 @@ package com.hiyako.app.ui.screens
 import com.hiyako.app.providers.AccountStore
 import androidx.compose.foundation.gestures.scrollBy
 import android.net.Uri
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -400,7 +401,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                     scope.launch {
                         val exported = vm.chatShareText(chat.id)
                         if (exported.isBlank()) Toast.makeText(context, tr("Nothing to export yet", "لا توجد رسائل بعد"), Toast.LENGTH_SHORT).show()
-                        else chatShareText(context, exported)
+                        else val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, exported) }; context.startActivity(Intent.createChooser(intent, "Share"))
                     }
                 }
                 SheetAction(Icons.Default.CheckCircle, tr("Select multiple", "تحديد متعدد")) { selectMode = true; selectedIds = setOf(chat.id); menuChat = null }
