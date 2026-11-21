@@ -120,8 +120,8 @@ fun SettingsScreen(
             // 1) Account Card
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                    .background(Brush.linearGradient(listOf(AccentBlue.copy(alpha = 0.50f), AccentTwo.copy(alpha = 0.28f))))
-                    .border(1.dp, GlassBorderBrush, RoundedCornerShape(20.dp))
+                    .background(SecondarySurface)
+                    .border(1.dp, BorderColor, RoundedCornerShape(20.dp))
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -144,7 +144,7 @@ fun SettingsScreen(
                             onSignIn()
                         }
                     },
-                    kind = ButtonKind.Primary
+                    kind = ButtonKind.Tonal
                 )
             }
 

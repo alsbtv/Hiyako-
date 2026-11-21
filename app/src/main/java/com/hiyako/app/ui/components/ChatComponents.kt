@@ -90,7 +90,7 @@ fun chatShareText(context: Context, text: String) {
 @Composable
 fun UserMessage(text: String, type: String, attachmentUri: String?, attachmentName: String?) {
     Row(
-        modifier = Modifier.fillMaxWidth().appear(distance = 18f).padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().appear(distance = 8f).padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.End
     ) {
         val shape = RoundedCornerShape(22.dp, 22.dp, 6.dp, 22.dp)
@@ -98,7 +98,7 @@ fun UserMessage(text: String, type: String, attachmentUri: String?, attachmentNa
             modifier = Modifier
                 .widthIn(max = 320.dp)
                 .clip(shape)
-                .background(AccentBrush)
+                .background(UserBubble)
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             if (attachmentUri != null && type == "IMAGE") {
@@ -112,15 +112,15 @@ fun UserMessage(text: String, type: String, attachmentUri: String?, attachmentNa
             }
             if (type == "FILE") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Description, null, tint = OnAccent, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Description, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(attachmentName ?: tr("File", "ملف"), color = OnAccent, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(attachmentName ?: tr("File", "ملف"), color = TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (text.isNotBlank()) Spacer(Modifier.height(8.dp))
             }
             if (text.isNotBlank()) {
                 SelectionContainer {
-                    Text(text, color = OnAccent, fontSize = 16.sp, lineHeight = 26.sp, style = LocalTextStyle.current.copy(textDirection = TextDirection.Content))
+                    Text(text, color = TextPrimary, fontSize = 16.sp, lineHeight = 26.sp, style = LocalTextStyle.current.copy(textDirection = TextDirection.Content))
                 }
             }
         }
@@ -138,14 +138,14 @@ fun AssistantMessage(
 ) {
     val context = LocalContext.current
     Row(
-        modifier = Modifier.fillMaxWidth().appear(distance = 18f).padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().appear(distance = 8f).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Top
     ) {
         Box(
-            modifier = Modifier.size(30.dp).background(AccentBrush, CircleShape),
+            modifier = Modifier.size(28.dp).background(AccentBlue.copy(alpha = 0.16f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Text("✦", color = OnAccent, fontSize = 14.sp)
+            Text("✦", color = AccentBlue, fontSize = 13.sp)
         }
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -192,7 +192,7 @@ fun TypingDots() {
                 ),
                 label = "dot$index"
             )
-            Box(Modifier.size(9.dp).graphicsLayer { scaleX = 0.7f + 0.3f * alpha; scaleY = 0.7f + 0.3f * alpha }.background(AccentBlue.copy(alpha = alpha), CircleShape))
+            Box(Modifier.size(7.dp).background(TextSecondary.copy(alpha = alpha), CircleShape))
             if (index < 2) Spacer(Modifier.width(6.dp))
         }
     }
@@ -398,7 +398,7 @@ fun ComposerBar(
     val haptic = LocalHapticFeedback.current
     var focused by remember { mutableStateOf(false) }
     val active = isGenerating || canSend
-    val sendScale by animateFloatAsState(if (active) 1f else 0.86f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "sendScale")
+    val sendScale by animateFloatAsState(if (active) 1f else 0.9f, spring(dampingRatio = Spring.DampingRatioNoBouncy), label = "sendScale")
 
     Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.padding(start = 4.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -407,7 +407,7 @@ fun ComposerBar(
         }
         Row(
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(ElevatedSurface)
-                .border(if (focused) 1.5.dp else 1.dp, if (focused) AccentBrush else SolidColor(BorderColor), RoundedCornerShape(30.dp))
+                .border(1.dp, if (focused) AccentBlue.copy(alpha = 0.55f) else BorderColor, RoundedCornerShape(30.dp))
                 .padding(start = 4.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.Bottom
         ) {
@@ -455,7 +455,7 @@ fun ComposerBar(
 @Composable
 private fun ToggleChip(label: String, active: Boolean, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (active) AccentBlue.copy(alpha = 0.22f) else ElevatedSurface).border(1.dp, if (active) AccentBrush else SolidColor(BorderColor), RoundedCornerShape(50)).clickable { onClick() }.padding(horizontal = 12.dp, vertical = 6.dp)
+        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (active) AccentBlue.copy(alpha = 0.22f) else ElevatedSurface).border(1.dp, if (active) AccentBlue.copy(alpha = 0.6f) else BorderColor, RoundedCornerShape(50)).clickable { onClick() }.padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Text(label, color = if (active) AccentBlue else TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }

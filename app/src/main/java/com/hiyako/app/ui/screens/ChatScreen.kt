@@ -97,7 +97,7 @@ private fun EmptyChat(onPick: (String) -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         AuroraOrb(96.dp)
         Spacer(Modifier.height(16.dp))
-        Text(tr("How can I help you today?", "كيف أقدر أساعدك اليوم؟"), color = TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
+        Text(tr("How can I help you today?", "كيف أقدر أساعدك اليوم؟"), color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
         Spacer(Modifier.height(24.dp))
         items.forEachIndexed { i, (icon, text) ->
             AnimatedVisibility(
@@ -105,7 +105,7 @@ private fun EmptyChat(onPick: (String) -> Unit) {
                 enter = fadeIn(tween(300, delayMillis = i * 80)) + slideInVertically(tween(300, delayMillis = i * 80)) { it / 4 }
             ) {
                 Row(
-                    Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(18.dp)).background(SecondarySurface).border(1.dp, GlassBorderBrush, RoundedCornerShape(18.dp)).clickable { onPick(text) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(18.dp)).background(SecondarySurface).border(1.dp, BorderColor, RoundedCornerShape(18.dp)).clickable { onPick(text) }.padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(icon, null, tint = AccentBlue, modifier = Modifier.size(22.dp))
@@ -221,7 +221,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(36.dp).background(AccentBrush, CircleShape), contentAlignment = Alignment.Center) { Text("✦", color = OnAccent, fontSize = 16.sp) }
                         Spacer(Modifier.width(10.dp))
-                        Text(tr(Brand.EN, Brand.AR), color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(tr(Brand.EN, Brand.AR), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Spacer(Modifier.height(14.dp))
                     SearchField(query, { query = it }, tr("Search chats", "ابحث في المحادثات"))
@@ -232,7 +232,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                     ) {
                         Icon(Icons.Default.Add, null, tint = OnAccent, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(10.dp))
-                        Text(tr("New chat", "محادثة جديدة"), color = OnAccent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(tr("New chat", "محادثة جديدة"), color = OnAccent, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                     Spacer(Modifier.height(8.dp))
                     if (selectMode) {
@@ -296,7 +296,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                 Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     GlassIconButton(Icons.Default.Menu, tr("Menu", "القائمة"), { scope.launch { drawerState.open() } })
                     Column(Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(chatTitle, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(chatTitle, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(3.dp))
                         Row(
                             Modifier.clip(RoundedCornerShape(50)).background(AccentBlue.copy(alpha = 0.16f)).border(1.dp, AccentBlue.copy(alpha = 0.40f), RoundedCornerShape(50))
