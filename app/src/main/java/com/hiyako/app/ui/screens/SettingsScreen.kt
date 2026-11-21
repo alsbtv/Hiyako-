@@ -1,5 +1,6 @@
 package com.hiyako.app.ui.screens
 
+import com.hiyako.app.ui.theme.Brand
 import kotlinx.coroutines.flow.first
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Brush
@@ -95,14 +96,14 @@ fun SettingsScreen(
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-        containerColor = OledBlack,
+        containerColor = Color.Transparent,
         topBar = {
             LargeTopAppBar(
                 title = { Text(tr("Settings", "الإعدادات")) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "رجوع")) } },
                 scrollBehavior = scroll,
                 colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = OledBlack, scrolledContainerColor = DeepSurface,
+                    containerColor = Color.Transparent, scrolledContainerColor = DeepSurface.copy(alpha = 0.92f),
                     titleContentColor = TextPrimary, navigationIconContentColor = TextPrimary
                 )
             )
@@ -119,11 +120,12 @@ fun SettingsScreen(
             // 1) Account Card
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                    .background(Brush.linearGradient(listOf(AccentBlue.copy(alpha = 0.25f), SecondarySurface)))
+                    .background(Brush.linearGradient(listOf(AccentBlue.copy(alpha = 0.50f), AccentTwo.copy(alpha = 0.28f))))
+                    .border(1.dp, GlassBorderBrush, RoundedCornerShape(20.dp))
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(Modifier.size(52.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(54.dp).background(AccentBrush, CircleShape), contentAlignment = Alignment.Center) {
                     Text(auth.username.firstOrNull()?.uppercase() ?: "✦", color = OnAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.width(14.dp))
@@ -142,7 +144,7 @@ fun SettingsScreen(
                             onSignIn()
                         }
                     },
-                    kind = ButtonKind.Tonal
+                    kind = ButtonKind.Primary
                 )
             }
 
@@ -153,7 +155,7 @@ fun SettingsScreen(
                         items(AppPalettes.all, key = { it.id }) { p ->
                             Column(Modifier.width(100.dp)) {
                                 Column(
-                                    Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(16.dp)).background(if (p.id == "paper") Color(0xFFFFFFFF) else Color(0xFF000000))
+                                    Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(16.dp)).background(p.base)
                                         .border(if (ThemeState.palette.id == p.id) 2.dp else 1.dp, if (ThemeState.palette.id == p.id) p.accent else p.border, RoundedCornerShape(16.dp))
                                         .clickable { ThemeState.select(context, p.id) }.padding(10.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -228,7 +230,7 @@ fun SettingsScreen(
                 SettingsRow(Icons.Outlined.DeleteForever, tr("Delete all data on this device", "حذف كل البيانات على هذا الجهاز"), danger = true, showDivider = false, onClick = { confirmWipe = true })
             }
 
-            Text("Hiyako $versionLabel", color = TextMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center)
+            Text("${tr(Brand.EN, Brand.AR)} $versionLabel", color = TextMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center)
             Spacer(Modifier.height(24.dp))
         }
     }

@@ -191,6 +191,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
 
     fun selectConversation(id: Int) { _activeConversationId.value = id }
     fun deleteChat(id: Int) { cancelRequestsFor(id); viewModelScope.launch { chatDao.clearChat(id); conversationDao.deleteConversation(id) } }
+    suspend fun exportChatText(id: Int): String = chatDao.getMessagesOnce(id).joinToString("\n\n") { (if (it.role == "user") "You" else "AI") + ":\n" + it.content }
     fun renameChat(id: Int, newTitle: String) { val clean = newTitle.trim(); if (clean.isNotEmpty()) viewModelScope.launch { conversationDao.updateTitle(id, clean) } }
     fun togglePin(id: Int, isPinned: Boolean) { viewModelScope.launch { conversationDao.updatePin(id, isPinned) } }
     fun reportMessage(messageId: Int, content: String) { val conversationId = _activeConversationId.value ?: return; viewModelScope.launch(Dispatchers.IO) { db.reportDao().insert(ReportEntity(messageId = messageId, conversationId = conversationId, content = content)) } }
@@ -332,10 +333,10 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
         val mem = _memories.value.take(20)
         if (mem.isNotEmpty()) { system.append("\n\nKnown facts about the user:\n"); mem.forEach { system.append("- ").append(it.content.take(300)).append('\n') } }
         
-        if (WorkspaceManager.isLoaded) {
+        if (WorkspaceManager.isLoaded && prefs.getBoolean("use_workspace_context", false)) {
             system.append("\n\nActive repository: ").append(WorkspaceManager.activeRepo).append('\n')
             var budget = 60000
-            for ((path, content) in WorkspaceManager.projectFiles) {
+            for ((path, content) in WorkspaceManager.projectFiles.toSortedMap()) {
                 if (budget <= 0) break
                 val chunk = content.take(minOf(budget, 6000))
                 system.append("\n=== ").append(path).append(" ===\n").append(chunk).append('\n')
@@ -400,8 +401,15 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         val bitmap = BitmapFactory.decodeFile(file.absolutePath, opts) ?: return null
         val out = ByteArrayOutputStream()
-        val format = if (bitmap.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
-        bitmap.compress(format, 85, out); bitmap.recycle()
+        val flat = if (bitmap.hasAlpha()) {
+            val background = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(background)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            canvas.drawBitmap(bitmap, 0f, 0f, null)
+            bitmap.recycle()
+            background
+        } else bitmap
+        flat.compress(Bitmap.CompressFormat.JPEG, 85, out); flat.recycle()
         return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
 

@@ -1,8 +1,22 @@
 package com.hiyako.app.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,17 +25,89 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hiyako.app.ui.i18n.tr
 import com.hiyako.app.ui.theme.*
+import kotlinx.coroutines.delay
+
+/** Fades and slides a view in the first time it appears. */
+fun Modifier.appear(delayMs: Int = 0, distance: Float = 28f): Modifier = composed {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        if (delayMs > 0) delay(delayMs.toLong())
+        progress.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+    }
+    this.graphicsLayer {
+        alpha = progress.value
+        translationY = (1f - progress.value) * distance
+    }
+}
+
+/** Frosted surface: translucent fill with a glowing gradient outline. */
+fun Modifier.glass(shape: Shape = RoundedCornerShape(24.dp)): Modifier =
+    this.clip(shape).background(SecondarySurface, shape).border(1.dp, GlassBorderBrush, shape)
+
+/** Round glass icon button used in top bars. */
+@Composable
+fun GlassIconButton(icon: ImageVector, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.88f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "glassIcon")
+    Box(
+        modifier
+            .size(44.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .glass(CircleShape)
+            .clickable(interactionSource = source, indication = LocalIndication.current, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) { Icon(icon, description, tint = TextPrimary, modifier = Modifier.size(22.dp)) }
+}
+
+/** Glowing, gently pulsing logo orb. */
+@Composable
+fun AuroraOrb(size: Dp = 120.dp) {
+    val transition = rememberInfiniteTransition(label = "orb")
+    val pulse by transition.animateFloat(0.94f, 1.08f, infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pulse")
+    val glow by transition.animateFloat(0.25f, 0.6f, infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "glow")
+    val spin by transition.animateFloat(0f, 360f, infiniteRepeatable(tween(14000, easing = LinearEasing)), label = "spin")
+    Box(Modifier.size(size * 1.9f), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(size * 1.9f).graphicsLayer { alpha = glow; scaleX = pulse; scaleY = pulse }
+                .background(Brush.radialGradient(listOf(AccentBlue.copy(alpha = 0.55f), Color.Transparent)), CircleShape)
+        )
+        Box(
+            Modifier.size(size).graphicsLayer { scaleX = pulse; scaleY = pulse; rotationZ = spin }
+                .background(Brush.sweepGradient(listOf(AccentBlue, AccentTwo, AccentThree, AccentBlue)), CircleShape)
+        )
+        Box(
+            Modifier.size(size * 0.86f).graphicsLayer { scaleX = pulse; scaleY = pulse }
+                .background(OledBlack, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                Modifier.size(size * 0.70f).background(AccentBrush, CircleShape),
+                contentAlignment = Alignment.Center
+            ) { Text("✦", color = OnAccent, fontSize = (size.value * 0.34f).sp) }
+        }
+    }
+}
 
 @Composable
 fun HiyakoButton(
@@ -33,31 +119,40 @@ fun HiyakoButton(
     loading: Boolean = false,
     icon: ImageVector? = null
 ) {
-    val container = when (kind) {
-        ButtonKind.Primary -> AccentBlue
-        ButtonKind.Tonal -> ElevatedSurface
-        ButtonKind.Danger -> DangerColor
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "btn")
+    val active = enabled && !loading
+    val shape = RoundedCornerShape(18.dp)
+    val fill: Brush = when {
+        !enabled -> SolidColor(BorderColor)
+        kind == ButtonKind.Primary -> AccentBrush
+        kind == ButtonKind.Tonal -> SolidColor(ElevatedSurface)
+        else -> SolidColor(DangerColor)
     }
-    val content = when (kind) {
-        ButtonKind.Primary -> OnAccent
-        ButtonKind.Tonal -> TextPrimary
-        ButtonKind.Danger -> Color(0xFF1A0000)
+    val content = when {
+        !enabled -> TextMuted
+        kind == ButtonKind.Primary -> OnAccent
+        kind == ButtonKind.Tonal -> TextPrimary
+        else -> Color(0xFF1A0000)
     }
-    Button(
-        onClick = onClick,
-        enabled = enabled && !loading,
-        modifier = modifier.heightIn(min = 52.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = container, contentColor = content,
-            disabledContainerColor = BorderColor, disabledContentColor = TextMuted
-        )
+    Row(
+        modifier
+            .heightIn(min = 52.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(shape)
+            .background(fill, shape)
+            .then(if (kind == ButtonKind.Tonal) Modifier.border(1.dp, GlassBorderBrush, shape) else Modifier)
+            .clickable(enabled = active, interactionSource = source, indication = LocalIndication.current, onClick = onClick)
+            .padding(horizontal = 22.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         if (loading) {
             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = content)
         } else {
-            if (icon != null) { Icon(icon, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)) }
-            Text(text, fontWeight = FontWeight.SemiBold)
+            if (icon != null) { Icon(icon, null, tint = content, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)) }
+            Text(text, color = content, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
     }
 }
@@ -66,17 +161,14 @@ enum class ButtonKind { Primary, Tonal, Danger }
 
 @Composable
 fun SettingsGroup(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth().appear()) {
         if (title != null) {
             Text(
-                title, color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 8.dp, bottom = 6.dp)
+                title, color = AccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 10.dp, bottom = 8.dp)
             )
         }
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SecondarySurface),
-            content = content
-        )
+        Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(26.dp)), content = content)
     }
 }
 
@@ -96,24 +188,25 @@ fun SettingsRow(
             Modifier
                 .fillMaxWidth()
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-                .heightIn(min = 56.dp)
+                .heightIn(min = 60.dp)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(tint.copy(alpha = 0.15f)),
+                Modifier.size(40.dp).clip(RoundedCornerShape(13.dp))
+                    .background(Brush.linearGradient(listOf(tint.copy(alpha = 0.30f), tint.copy(alpha = 0.10f)))),
                 contentAlignment = Alignment.Center
-            ) { Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp)) }
-            Spacer(Modifier.width(12.dp))
+            ) { Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp)) }
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, color = if (danger) DangerColor else TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text(title, color = if (danger) DangerColor else TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 if (subtitle != null) Text(subtitle, color = TextMuted, fontSize = 12.sp, lineHeight = 18.sp)
             }
             if (trailing != null) trailing()
             else if (onClick != null) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = TextMuted)
         }
         if (showDivider) {
-            Box(Modifier.fillMaxWidth().padding(start = 64.dp).height(1.dp).background(BorderColor))
+            Box(Modifier.fillMaxWidth().padding(start = 70.dp).height(1.dp).background(BorderColor))
         }
     }
 }
@@ -125,15 +218,16 @@ fun EmptyState(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier.fillMaxWidth().padding(32.dp),
+        modifier.fillMaxWidth().padding(32.dp).appear(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
-            Modifier.size(72.dp).clip(CircleShape).background(AccentBlue.copy(alpha = 0.12f)),
+            Modifier.size(80.dp).clip(CircleShape).background(Brush.linearGradient(listOf(AccentBlue.copy(alpha = 0.30f), AccentTwo.copy(alpha = 0.12f))))
+                .border(1.dp, GlassBorderBrush, CircleShape),
             contentAlignment = Alignment.Center
-        ) { Icon(icon, null, tint = AccentBlue, modifier = Modifier.size(32.dp)) }
-        Text(title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        ) { Icon(icon, null, tint = AccentBlue, modifier = Modifier.size(34.dp)) }
+        Text(title, color = TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Text(message, color = TextSecondary, fontSize = 14.sp, lineHeight = 22.sp, textAlign = TextAlign.Center)
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(4.dp))
@@ -154,11 +248,11 @@ fun ScreenScaffold(
 ) {
     Scaffold(
         modifier = modifier,
-        containerColor = OledBlack,
+        containerColor = Color.Transparent,
         floatingActionButton = floatingActionButton,
         topBar = {
             TopAppBar(
-                title = { Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold) },
+                title = { Text(title, color = TextPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "رجوع"), tint = TextPrimary)
@@ -166,7 +260,7 @@ fun ScreenScaffold(
                 },
                 actions = actions,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = OledBlack, scrolledContainerColor = DeepSurface
+                    containerColor = Color.Transparent, scrolledContainerColor = DeepSurface.copy(alpha = 0.92f)
                 )
             )
         },
@@ -178,10 +272,10 @@ fun ScreenScaffold(
 fun ConfirmDialog(title: String, message: String, confirmLabel: String, danger: Boolean = false,
                   onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
-        onDismissRequest = onDismiss, containerColor = CardDark, shape = RoundedCornerShape(24.dp),
+        onDismissRequest = onDismiss, containerColor = CardDark, shape = RoundedCornerShape(28.dp),
         title = { Text(title, color = TextPrimary, fontWeight = FontWeight.Bold) },
         text = { Text(message, color = TextSecondary, lineHeight = 22.sp) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel, color = if (danger) DangerColor else AccentBlue, fontWeight = FontWeight.SemiBold) } },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel, color = if (danger) DangerColor else AccentBlue, fontWeight = FontWeight.Bold) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
     )
 }
