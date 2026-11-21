@@ -268,4 +268,3 @@ fun ConfirmDialog(title: String, message: String, confirmLabel: String, danger: 
         dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
     )
 }
--e 
