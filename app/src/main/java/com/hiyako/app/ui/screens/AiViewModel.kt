@@ -154,7 +154,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
         tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "nexus_tts")
     }
 
-    fun setFontSize(value: Float) { fontSize = value.coerceIn(0.85f, 1.4f); prefs.edit().putFloat("fontSize", fontSize).apply() }
+    fun updateFontSize(value: Float) { fontSize = value.coerceIn(0.85f, 1.4f); prefs.edit().putFloat("fontSize", fontSize).apply() }
     fun toggleThink() { isThinkingMode = !isThinkingMode }
     fun toggleSearch() { isSearchMode = !isSearchMode }
     fun selectModel(model: AiModel) { _selectedModel.value = model; prefs.edit().putString("model_id", model.id).putString("model_name", model.name).putString("model_account", model.accountId).apply() }

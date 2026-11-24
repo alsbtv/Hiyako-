@@ -469,14 +469,14 @@ private fun FontSizePage(vm: AiViewModel) {
             Text("A", color = TextSecondary, fontSize = (13f / current).sp)
             Slider(
                 value = draft, onValueChange = { draft = it }, valueRange = 0.85f..1.4f,
-                onValueChangeFinished = { vm.setFontSize(draft) },
+                onValueChangeFinished = { vm.updateFontSize(draft) },
                 colors = SliderDefaults.colors(thumbColor = AccentBlue, activeTrackColor = AccentBlue, inactiveTrackColor = BorderColor),
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
             )
             Text("A", color = TextSecondary, fontSize = (22f / current).sp)
         }
         Text("${(draft * 100).roundToInt()}%", color = TextMuted, fontSize = 12.sp)
-        HiyakoButton(tr("Reset to default", "إعادة للافتراضي"), onClick = { draft = 1f; vm.setFontSize(1f) }, kind = ButtonKind.Tonal, modifier = Modifier.fillMaxWidth())
+        HiyakoButton(tr("Reset to default", "إعادة للافتراضي"), onClick = { draft = 1f; vm.updateFontSize(1f) }, kind = ButtonKind.Tonal, modifier = Modifier.fillMaxWidth())
     }
 }
 
