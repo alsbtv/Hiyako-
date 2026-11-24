@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Warning
@@ -393,7 +394,8 @@ fun ComposerBar(
     isThinking: Boolean,
     onThinkClick: () -> Unit,
     isSearch: Boolean,
-    onSearchClick: () -> Unit
+    onSearchClick: () -> Unit,
+    onMicClick: (() -> Unit)? = null
 ) {
     val haptic = LocalHapticFeedback.current
     var focused by remember { mutableStateOf(false) }
@@ -428,6 +430,11 @@ fun ComposerBar(
                     }
                 }
             )
+            if (onMicClick != null && !isGenerating && !canSend) {
+                IconButton(onClick = onMicClick, modifier = Modifier.size(44.dp)) {
+                    Icon(Icons.Default.Mic, contentDescription = tr("Voice input", "إدخال صوتي"), tint = TextSecondary)
+                }
+            }
             Spacer(Modifier.width(4.dp))
             Box(
                 modifier = Modifier.size(44.dp).graphicsLayer { scaleX = sendScale; scaleY = sendScale }.clip(CircleShape).background(if (active) AccentBrush else SolidColor(BorderColor)).clickable(enabled = active) {

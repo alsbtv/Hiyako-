@@ -653,6 +653,9 @@ FILE: ./app/src/main/java/com/hiyako/app/ui/components/ChatComponents.kt
 
 package com.hiyako.app.ui.components
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -740,7 +743,7 @@ fun chatShareText(context: Context, text: String) {
 @Composable
 fun UserMessage(text: String, type: String, attachmentUri: String?, attachmentName: String?) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().appear(distance = 8f).padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.End
     ) {
         val shape = RoundedCornerShape(22.dp, 22.dp, 6.dp, 22.dp)
@@ -788,11 +791,11 @@ fun AssistantMessage(
 ) {
     val context = LocalContext.current
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().appear(distance = 8f).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Top
     ) {
         Box(
-            modifier = Modifier.size(28.dp).background(AccentBlue.copy(alpha = 0.18f), CircleShape),
+            modifier = Modifier.size(28.dp).background(AccentBlue.copy(alpha = 0.16f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text("✦", color = AccentBlue, fontSize = 13.sp)
@@ -1048,15 +1051,16 @@ fun ComposerBar(
     val haptic = LocalHapticFeedback.current
     var focused by remember { mutableStateOf(false) }
     val active = isGenerating || canSend
+    val sendScale by animateFloatAsState(if (active) 1f else 0.9f, spring(dampingRatio = Spring.DampingRatioNoBouncy), label = "sendScale")
 
-    Column(modifier = Modifier.fillMaxWidth().background(OledBlack).navigationBarsPadding().imePadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.padding(start = 4.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ToggleChip(tr("Think", "تفكير"), isThinking, onThinkClick)
             ToggleChip(tr("Search", "بحث"), isSearch, onSearchClick)
         }
         Row(
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(ElevatedSurface)
-                .border(1.dp, if (focused) AccentBlue.copy(alpha = 0.6f) else Color.Transparent, RoundedCornerShape(28.dp))
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(ElevatedSurface)
+                .border(1.dp, if (focused) AccentBlue.copy(alpha = 0.55f) else BorderColor, RoundedCornerShape(30.dp))
                 .padding(start = 4.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.Bottom
         ) {
@@ -1079,7 +1083,7 @@ fun ComposerBar(
             )
             Spacer(Modifier.width(4.dp))
             Box(
-                modifier = Modifier.size(44.dp).clip(CircleShape).background(if (active) AccentBlue else BorderColor).clickable(enabled = active) {
+                modifier = Modifier.size(44.dp).graphicsLayer { scaleX = sendScale; scaleY = sendScale }.clip(CircleShape).background(if (active) AccentBrush else SolidColor(BorderColor)).clickable(enabled = active) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     if (isGenerating) onStop() else onSend()
                 },
@@ -1104,7 +1108,7 @@ fun ComposerBar(
 @Composable
 private fun ToggleChip(label: String, active: Boolean, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (active) AccentBlue.copy(alpha = 0.18f) else ElevatedSurface).border(1.dp, if (active) AccentBlue else BorderColor, RoundedCornerShape(50)).clickable { onClick() }.padding(horizontal = 12.dp, vertical = 6.dp)
+        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (active) AccentBlue.copy(alpha = 0.22f) else ElevatedSurface).border(1.dp, if (active) AccentBlue.copy(alpha = 0.6f) else BorderColor, RoundedCornerShape(50)).clickable { onClick() }.padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Text(label, color = if (active) AccentBlue else TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
@@ -1174,11 +1178,11 @@ import com.hiyako.app.ui.theme.*
 import kotlinx.coroutines.delay
 
 /** Fades and slides a view in the first time it appears. */
-fun Modifier.appear(delayMs: Int = 0, distance: Float = 28f): Modifier = composed {
+fun Modifier.appear(delayMs: Int = 0, distance: Float = 10f): Modifier = composed {
     val progress = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         if (delayMs > 0) delay(delayMs.toLong())
-        progress.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+        progress.animateTo(1f, tween(320, easing = FastOutSlowInEasing))
     }
     this.graphicsLayer {
         alpha = progress.value
@@ -1188,14 +1192,14 @@ fun Modifier.appear(delayMs: Int = 0, distance: Float = 28f): Modifier = compose
 
 /** Frosted surface: translucent fill with a glowing gradient outline. */
 fun Modifier.glass(shape: Shape = RoundedCornerShape(24.dp)): Modifier =
-    this.clip(shape).background(SecondarySurface, shape).border(1.dp, GlassBorderBrush, shape)
+    this.clip(shape).background(SecondarySurface, shape).border(1.dp, BorderColor, shape)
 
 /** Round glass icon button used in top bars. */
 @Composable
 fun GlassIconButton(icon: ImageVector, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.88f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "glassIcon")
+    val scale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = Spring.DampingRatioNoBouncy), label = "glassIcon")
     Box(
         modifier
             .size(44.dp)
@@ -1206,32 +1210,22 @@ fun GlassIconButton(icon: ImageVector, description: String, onClick: () -> Unit,
     ) { Icon(icon, description, tint = TextPrimary, modifier = Modifier.size(22.dp)) }
 }
 
-/** Glowing, gently pulsing logo orb. */
+/** Quiet logo mark: a soft ring that slowly breathes. */
 @Composable
 fun AuroraOrb(size: Dp = 120.dp) {
     val transition = rememberInfiniteTransition(label = "orb")
-    val pulse by transition.animateFloat(0.94f, 1.08f, infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pulse")
-    val glow by transition.animateFloat(0.25f, 0.6f, infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "glow")
-    val spin by transition.animateFloat(0f, 360f, infiniteRepeatable(tween(14000, easing = LinearEasing)), label = "spin")
-    Box(Modifier.size(size * 1.9f), contentAlignment = Alignment.Center) {
+    val breathe by transition.animateFloat(0.97f, 1.03f, infiniteRepeatable(tween(4200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "breathe")
+    Box(Modifier.size(size * 1.5f), contentAlignment = Alignment.Center) {
         Box(
-            Modifier.size(size * 1.9f).graphicsLayer { alpha = glow; scaleX = pulse; scaleY = pulse }
-                .background(Brush.radialGradient(listOf(AccentBlue.copy(alpha = 0.55f), Color.Transparent)), CircleShape)
+            Modifier.size(size * 1.3f).graphicsLayer { scaleX = breathe; scaleY = breathe }
+                .border(1.dp, AccentBlue.copy(alpha = 0.25f), CircleShape)
         )
         Box(
-            Modifier.size(size).graphicsLayer { scaleX = pulse; scaleY = pulse; rotationZ = spin }
-                .background(Brush.sweepGradient(listOf(AccentBlue, AccentTwo, AccentThree, AccentBlue)), CircleShape)
-        )
-        Box(
-            Modifier.size(size * 0.86f).graphicsLayer { scaleX = pulse; scaleY = pulse }
-                .background(OledBlack, CircleShape),
+            Modifier.size(size).graphicsLayer { scaleX = breathe; scaleY = breathe }
+                .background(AccentBlue.copy(alpha = 0.14f), CircleShape)
+                .border(1.dp, AccentBlue.copy(alpha = 0.45f), CircleShape),
             contentAlignment = Alignment.Center
-        ) {
-            Box(
-                Modifier.size(size * 0.70f).background(AccentBrush, CircleShape),
-                contentAlignment = Alignment.Center
-            ) { Text("✦", color = OnAccent, fontSize = (size.value * 0.34f).sp) }
-        }
+        ) { Text("✦", color = AccentBlue, fontSize = (size.value * 0.34f).sp) }
     }
 }
 
@@ -1247,9 +1241,9 @@ fun HiyakoButton(
 ) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "btn")
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, spring(dampingRatio = Spring.DampingRatioNoBouncy), label = "btn")
     val active = enabled && !loading
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(16.dp)
     val fill: Brush = when {
         !enabled -> SolidColor(BorderColor)
         kind == ButtonKind.Primary -> AccentBrush
@@ -1268,7 +1262,7 @@ fun HiyakoButton(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(shape)
             .background(fill, shape)
-            .then(if (kind == ButtonKind.Tonal) Modifier.border(1.dp, GlassBorderBrush, shape) else Modifier)
+            .then(if (kind == ButtonKind.Tonal) Modifier.border(1.dp, BorderColor, shape) else Modifier)
             .clickable(enabled = active, interactionSource = source, indication = LocalIndication.current, onClick = onClick)
             .padding(horizontal = 22.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.Center,
@@ -1278,7 +1272,7 @@ fun HiyakoButton(
             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = content)
         } else {
             if (icon != null) { Icon(icon, null, tint = content, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)) }
-            Text(text, color = content, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text(text, color = content, fontWeight = FontWeight.Medium, fontSize = 15.sp)
         }
     }
 }
@@ -1290,11 +1284,11 @@ fun SettingsGroup(title: String? = null, content: @Composable ColumnScope.() -> 
     Column(Modifier.fillMaxWidth().appear()) {
         if (title != null) {
             Text(
-                title, color = AccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                title, color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(start = 10.dp, bottom = 8.dp)
             )
         }
-        Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(26.dp)), content = content)
+        Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp)), content = content)
     }
 }
 
@@ -1320,12 +1314,12 @@ fun SettingsRow(
         ) {
             Box(
                 Modifier.size(40.dp).clip(RoundedCornerShape(13.dp))
-                    .background(Brush.linearGradient(listOf(tint.copy(alpha = 0.30f), tint.copy(alpha = 0.10f)))),
+                    .background(tint.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) { Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp)) }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, color = if (danger) DangerColor else TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(title, color = if (danger) DangerColor else TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 if (subtitle != null) Text(subtitle, color = TextMuted, fontSize = 12.sp, lineHeight = 18.sp)
             }
             if (trailing != null) trailing()
@@ -1349,11 +1343,10 @@ fun EmptyState(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
-            Modifier.size(80.dp).clip(CircleShape).background(Brush.linearGradient(listOf(AccentBlue.copy(alpha = 0.30f), AccentTwo.copy(alpha = 0.12f))))
-                .border(1.dp, GlassBorderBrush, CircleShape),
+            Modifier.size(72.dp).clip(CircleShape).background(AccentBlue.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
         ) { Icon(icon, null, tint = AccentBlue, modifier = Modifier.size(34.dp)) }
-        Text(title, color = TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text(title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         Text(message, color = TextSecondary, fontSize = 14.sp, lineHeight = 22.sp, textAlign = TextAlign.Center)
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(4.dp))
@@ -1378,7 +1371,7 @@ fun ScreenScaffold(
         floatingActionButton = floatingActionButton,
         topBar = {
             TopAppBar(
-                title = { Text(title, color = TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "رجوع"), tint = TextPrimary)
@@ -1398,8 +1391,8 @@ fun ScreenScaffold(
 fun ConfirmDialog(title: String, message: String, confirmLabel: String, danger: Boolean = false,
                   onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
-        onDismissRequest = onDismiss, containerColor = CardDark, shape = RoundedCornerShape(28.dp),
-        title = { Text(title, color = TextPrimary, fontWeight = FontWeight.Bold) },
+        onDismissRequest = onDismiss, containerColor = CardDark, shape = RoundedCornerShape(24.dp),
+        title = { Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold) },
         text = { Text(message, color = TextSecondary, lineHeight = 22.sp) },
         confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel, color = if (danger) DangerColor else AccentBlue, fontWeight = FontWeight.Bold) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
@@ -1414,12 +1407,6 @@ FILE: ./app/src/main/java/com/hiyako/app/ui/theme/Theme.kt
 package com.hiyako.app.ui.theme
 
 import android.content.Context
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -1430,15 +1417,16 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -1477,47 +1465,47 @@ data class AppPalette(
 
 object AppPalettes {
     val obsidian = AppPalette(
-        id = "obsidian", name = "Aurora", dark = true,
-        base = Color(0xFF07060F), surface = Color(0xFF0E0C1C), card = Color(0xFF16132B),
-        secondary = Color(0x14FFFFFF), elevated = Color(0x22FFFFFF), userBubble = Color(0xFF6D4AFF), border = Color(0x2EFFFFFF),
-        textPrimary = Color(0xFFF8F7FF), textSecondary = Color(0xFFB9B5D3), textMuted = Color(0xFF9B97B8),
-        accent = Color(0xFF7C5CFF), accent2 = Color(0xFF00B8D9), accent3 = Color(0xFFF472B6), onAccent = Color(0xFFFFFFFF)
+        id = "obsidian", name = "Calm", dark = true,
+        base = Color(0xFF111214), surface = Color(0xFF17181B), card = Color(0xFF1D1E22),
+        secondary = Color(0xFF1A1B1E), elevated = Color(0xFF232428), userBubble = Color(0xFF2A2C31), border = Color(0xFF2C2E33),
+        textPrimary = Color(0xFFE8E6E1), textSecondary = Color(0xFFA8A6A0), textMuted = Color(0xFF8A8883),
+        accent = Color(0xFF9DB8A5), accent2 = Color(0xFF9DB8A5), accent3 = Color(0xFF9DB8A5), onAccent = Color(0xFF111214)
     )
     val midnight = AppPalette(
-        id = "midnight", name = "Ocean", dark = true,
-        base = Color(0xFF040B1A), surface = Color(0xFF0A1428), card = Color(0xFF111E3A),
-        secondary = Color(0x14FFFFFF), elevated = Color(0x22FFFFFF), userBubble = Color(0xFF2563EB), border = Color(0x2EFFFFFF),
-        textPrimary = Color(0xFFF1F5F9), textSecondary = Color(0xFFA9B8CF), textMuted = Color(0xFF8CA0BC),
-        accent = Color(0xFF3B82F6), accent2 = Color(0xFF06B6D4), accent3 = Color(0xFF8B5CF6), onAccent = Color(0xFF04101F)
+        id = "midnight", name = "Slate", dark = true,
+        base = Color(0xFF0F1216), surface = Color(0xFF151A20), card = Color(0xFF1B2128),
+        secondary = Color(0xFF181D23), elevated = Color(0xFF212830), userBubble = Color(0xFF273039), border = Color(0xFF2A323B),
+        textPrimary = Color(0xFFE6E9ED), textSecondary = Color(0xFFA5ACB5), textMuted = Color(0xFF879099),
+        accent = Color(0xFF8FA9C4), accent2 = Color(0xFF8FA9C4), accent3 = Color(0xFF8FA9C4), onAccent = Color(0xFF0F1216)
     )
     val ember = AppPalette(
-        id = "ember", name = "Ember", dark = true,
-        base = Color(0xFF120806), surface = Color(0xFF1D100C), card = Color(0xFF2A1812),
-        secondary = Color(0x14FFFFFF), elevated = Color(0x22FFFFFF), userBubble = Color(0xFFEA580C), border = Color(0x2EFFFFFF),
-        textPrimary = Color(0xFFFFF7ED), textSecondary = Color(0xFFD9C2B4), textMuted = Color(0xFFA68C7E),
-        accent = Color(0xFFF97316), accent2 = Color(0xFFFBBF24), accent3 = Color(0xFFEF4444), onAccent = Color(0xFF1A0A00)
+        id = "ember", name = "Sand", dark = true,
+        base = Color(0xFF15120F), surface = Color(0xFF1B1713), card = Color(0xFF221D18),
+        secondary = Color(0xFF1E1A16), elevated = Color(0xFF29231D), userBubble = Color(0xFF302922), border = Color(0xFF332C25),
+        textPrimary = Color(0xFFECE6DC), textSecondary = Color(0xFFB0A89B), textMuted = Color(0xFF918979),
+        accent = Color(0xFFC9A57A), accent2 = Color(0xFFC9A57A), accent3 = Color(0xFFC9A57A), onAccent = Color(0xFF15120F)
     )
     val forest = AppPalette(
-        id = "forest", name = "Forest", dark = true,
-        base = Color(0xFF04110B), surface = Color(0xFF0A1B12), card = Color(0xFF11291D),
-        secondary = Color(0x14FFFFFF), elevated = Color(0x22FFFFFF), userBubble = Color(0xFF059669), border = Color(0x2EFFFFFF),
-        textPrimary = Color(0xFFECFDF5), textSecondary = Color(0xFFAEDBC4), textMuted = Color(0xFF7FAE97),
-        accent = Color(0xFF10B981), accent2 = Color(0xFF84CC16), accent3 = Color(0xFF06B6D4), onAccent = Color(0xFF03130B)
+        id = "forest", name = "Moss", dark = true,
+        base = Color(0xFF0F1411), surface = Color(0xFF151B17), card = Color(0xFF1B231E),
+        secondary = Color(0xFF181F1A), elevated = Color(0xFF212B24), userBubble = Color(0xFF28342C), border = Color(0xFF2A352D),
+        textPrimary = Color(0xFFE5EBE6), textSecondary = Color(0xFFA6B2A9), textMuted = Color(0xFF86948B),
+        accent = Color(0xFF8FB39A), accent2 = Color(0xFF8FB39A), accent3 = Color(0xFF8FB39A), onAccent = Color(0xFF0F1411)
     )
     val rose = AppPalette(
-        id = "rose", name = "Rose", dark = true,
-        base = Color(0xFF140812), surface = Color(0xFF1F0F1B), card = Color(0xFF2C1727),
-        secondary = Color(0x14FFFFFF), elevated = Color(0x22FFFFFF), userBubble = Color(0xFFDB2777), border = Color(0x2EFFFFFF),
-        textPrimary = Color(0xFFFFF1F7), textSecondary = Color(0xFFE3BCD0), textMuted = Color(0xFFB08AA0),
-        accent = Color(0xFFEC4899), accent2 = Color(0xFFA855F7), accent3 = Color(0xFFFB7185), onAccent = Color(0xFFFFFFFF)
+        id = "rose", name = "Dusk", dark = true,
+        base = Color(0xFF14111A), surface = Color(0xFF1A161F), card = Color(0xFF211C28),
+        secondary = Color(0xFF1D1923), elevated = Color(0xFF282230), userBubble = Color(0xFF2F2838), border = Color(0xFF322B3B),
+        textPrimary = Color(0xFFEAE6EE), textSecondary = Color(0xFFABA3B4), textMuted = Color(0xFF8D8498),
+        accent = Color(0xFFB59AC0), accent2 = Color(0xFFB59AC0), accent3 = Color(0xFFB59AC0), onAccent = Color(0xFF14111A)
     )
     val paper = AppPalette(
         id = "paper", name = "Paper", dark = false,
-        base = Color(0xFFF6F5FF), surface = Color(0xFFFFFFFF), card = Color(0xFFFFFFFF),
-        secondary = Color(0xB3FFFFFF), elevated = Color(0xE6FFFFFF), userBubble = Color(0xFF4F46E5), border = Color(0x331E1B4B),
-        textPrimary = Color(0xFF14122B), textSecondary = Color(0xFF4B4870), textMuted = Color(0xFF6B6890),
-        accent = Color(0xFF4F46E5), accent2 = Color(0xFF0EA5E9), accent3 = Color(0xFFEC4899), onAccent = Color(0xFFFFFFFF),
-        codeBackground = Color(0xFFEFEDFB), codeHeader = Color(0xFFE2DFF5),
+        base = Color(0xFFF5F3EE), surface = Color(0xFFFFFFFF), card = Color(0xFFFFFFFF),
+        secondary = Color(0xFFFFFFFF), elevated = Color(0xFFEFEDE7), userBubble = Color(0xFFE9E6DF), border = Color(0xFFDDD9D0),
+        textPrimary = Color(0xFF22201C), textSecondary = Color(0xFF5C5953), textMuted = Color(0xFF7A766F),
+        accent = Color(0xFF4F6B58), accent2 = Color(0xFF4F6B58), accent3 = Color(0xFF4F6B58), onAccent = Color(0xFFFFFFFF),
+        codeBackground = Color(0xFFEFEDE7), codeHeader = Color(0xFFE5E2DA),
         danger = Color(0xFFDC2626)
     )
 
@@ -1566,41 +1554,27 @@ val CodeBg: Color get() = ThemeState.palette.codeBackground
 val CodeHeader: Color get() = ThemeState.palette.codeHeader
 
 /** Main accent gradient used by buttons, the user bubble, the send button and avatars. */
-val AccentBrush: Brush get() = Brush.linearGradient(listOf(ThemeState.palette.accent, ThemeState.palette.accent2))
+val AccentBrush: Brush get() = SolidColor(ThemeState.palette.accent)
 
 /** Thin glowing outline used on glass cards. */
-val GlassBorderBrush: Brush
-    get() = Brush.linearGradient(
-        listOf(
-            ThemeState.palette.accent.copy(alpha = 0.55f),
-            ThemeState.palette.border,
-            ThemeState.palette.accent2.copy(alpha = 0.40f)
-        )
-    )
+val GlassBorderBrush: Brush get() = SolidColor(ThemeState.palette.border)
 
-/** Animated aurora: three slowly drifting colour clouds behind the whole app. */
+/** Calm background: a flat base colour with a barely visible soft light at the top. */
 @Composable
 fun AuroraBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     val p = ThemeState.palette
-    val transition = rememberInfiniteTransition(label = "aurora")
-    val a by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(17000, easing = LinearEasing), RepeatMode.Reverse), label = "a")
-    val b by transition.animateFloat(1f, 0f, infiniteRepeatable(tween(23000, easing = LinearEasing), RepeatMode.Reverse), label = "b")
-    val c by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(29000, easing = LinearEasing), RepeatMode.Reverse), label = "c")
-    val strength = if (p.dark) 0.36f else 0.24f
     Box(
         modifier
             .fillMaxSize()
             .background(p.base)
             .drawBehind {
-                val w = size.width
-                val h = size.height
-                val radius = maxOf(w, h) * 0.78f
-                val c1 = Offset(w * (0.05f + 0.60f * a), h * (0.02f + 0.30f * b))
-                val c2 = Offset(w * (0.95f - 0.55f * b), h * (0.55f + 0.35f * c))
-                val c3 = Offset(w * (0.10f + 0.50f * c), h * (0.95f - 0.25f * a))
-                drawCircle(Brush.radialGradient(listOf(p.accent.copy(alpha = strength), Color.Transparent), center = c1, radius = radius), radius, c1)
-                drawCircle(Brush.radialGradient(listOf(p.accent2.copy(alpha = strength * 0.85f), Color.Transparent), center = c2, radius = radius), radius, c2)
-                drawCircle(Brush.radialGradient(listOf(p.accent3.copy(alpha = strength * 0.7f), Color.Transparent), center = c3, radius = radius), radius, c3)
+                val radius = size.width * 1.1f
+                val centre = Offset(size.width * 0.5f, -size.height * 0.05f)
+                drawCircle(
+                    Brush.radialGradient(listOf(p.accent.copy(alpha = if (p.dark) 0.07f else 0.10f), Color.Transparent), center = centre, radius = radius),
+                    radius,
+                    centre
+                )
             },
         content = content
     )
@@ -1875,7 +1849,10 @@ FILE: ./app/src/main/java/com/hiyako/app/ui/screens/ChatScreen.kt
 
 package com.hiyako.app.ui.screens
 
-import android.content.Intent
+import com.hiyako.app.ui.theme.Brand
+import androidx.compose.foundation.layout.statusBarsPadding
+import com.hiyako.app.providers.AccountStore
+import androidx.compose.foundation.gestures.scrollBy
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -1885,6 +1862,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -1895,6 +1873,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -1964,14 +1944,9 @@ private fun EmptyChat(onPick: (String) -> Unit) {
     LaunchedEffect(Unit) { shown = true }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Box(contentAlignment = Alignment.Center) {
-            Box(Modifier.size(140.dp).background(Brush.radialGradient(listOf(AccentBlue.copy(alpha = 0.30f), Color.Transparent))))
-            Box(Modifier.size(60.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
-                Text("✦", color = OnAccent, fontSize = 26.sp)
-            }
-        }
+        AuroraOrb(96.dp)
         Spacer(Modifier.height(16.dp))
-        Text(tr("How can I help you today?", "كيف أقدر أساعدك اليوم؟"), color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text(tr("How can I help you today?", "كيف أقدر أساعدك اليوم؟"), color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
         Spacer(Modifier.height(24.dp))
         items.forEachIndexed { i, (icon, text) ->
             AnimatedVisibility(
@@ -1991,18 +1966,32 @@ private fun EmptyChat(onPick: (String) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatRow(chat: ConversationEntity, active: Boolean, onClick: () -> Unit, onLongPress: () -> Unit) {
+private fun ChatRow(chat: ConversationEntity, active: Boolean, onClick: () -> Unit, onLongPress: () -> Unit, selectMode: Boolean = false, selected: Boolean = false) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (active) SecondarySurface else Color.Transparent)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (active || selected) AccentBlue.copy(alpha = 0.18f) else Color.Transparent)
             .combinedClickable(onClick = onClick, onLongClick = onLongPress).padding(vertical = 10.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (selectMode) {
+            Icon(if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, null, tint = if (selected) AccentBlue else TextMuted, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+        }
         if (chat.isPinned) {
             Icon(Icons.Default.PushPin, null, tint = AccentBlue, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
         }
         Text(chat.title, color = TextPrimary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun SheetAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = if (danger) DangerColor else AccentBlue, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        Text(label, color = if (danger) DangerColor else TextPrimary, fontSize = 16.sp)
     }
 }
 
@@ -2018,7 +2007,6 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var stickToBottom by remember { mutableStateOf(true) }
-    var showTopMenu by remember { mutableStateOf(false) }
 
     val messages by vm.messages.collectAsState()
     val conversations by vm.conversations.collectAsState()
@@ -2026,6 +2014,17 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     val activeId by vm.activeConversationId.collectAsState()
     val generating by vm.generating.collectAsState()
     val errors by vm.errors.collectAsState()
+    val auth by vm.auth.collectAsState()
+    val models by vm.availableModels.collectAsState()
+    val selectedModel by vm.selectedModel.collectAsState()
+    var showModelSheet by remember { mutableStateOf(false) }
+    var menuChat by remember { mutableStateOf<ConversationEntity?>(null) }
+    var renameTarget by remember { mutableStateOf<ConversationEntity?>(null) }
+    var renameText by remember { mutableStateOf("") }
+    var deleteTarget by remember { mutableStateOf<ConversationEntity?>(null) }
+    var selectMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf(setOf<Int>()) }
+    var confirmDeleteSelected by remember { mutableStateOf(false) }
 
     val partial: String? = activeId?.let { generating[it] }
     val errorText: String? = activeId?.let { errors[it] }
@@ -2045,7 +2044,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
         snapshotFlow { listState.isScrollInProgress }.collect { scrolling -> if (!scrolling) stickToBottom = !listState.canScrollForward }
     }
     LaunchedEffect(activeId) { stickToBottom = true }
-    LaunchedEffect(partial, totalItems, activeId) { if (stickToBottom && totalItems > 0) listState.animateScrollToItem(totalItems - 1) }
+    LaunchedEffect(partial, totalItems, activeId) { if (stickToBottom && totalItems > 0) listState.scrollBy(100000f) }
 
     val send: () -> Unit = {
         if (!vm.canSend()) {
@@ -2069,35 +2068,54 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
             ModalDrawerSheet(drawerContainerColor = DeepSurface, modifier = Modifier.width(300.dp)) {
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(34.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) { Text("✦", color = OnAccent, fontSize = 15.sp) }
+                        Box(Modifier.size(36.dp).background(AccentBrush, CircleShape), contentAlignment = Alignment.Center) { Text("✦", color = OnAccent, fontSize = 16.sp) }
                         Spacer(Modifier.width(10.dp))
-                        Text(tr("Hiyako", "هياكو"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text(tr(Brand.EN, Brand.AR), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Spacer(Modifier.height(14.dp))
                     SearchField(query, { query = it }, tr("Search chats", "ابحث في المحادثات"))
                     Spacer(Modifier.height(12.dp))
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AccentBlue.copy(alpha = 0.15f)).clickable { vm.createNewConversation(); scope.launch { drawerState.close() } }.padding(horizontal = 14.dp, vertical = 12.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(AccentBrush).clickable { vm.createNewConversation(); scope.launch { drawerState.close() } }.padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Add, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Add, null, tint = OnAccent, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(10.dp))
-                        Text(tr("New chat", "محادثة جديدة"), color = AccentBlue, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(tr("New chat", "محادثة جديدة"), color = OnAccent, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                     Spacer(Modifier.height(8.dp))
+                    if (selectMode) {
+                        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(tr("${selectedIds.size} selected", "${selectedIds.size} محددة"), color = TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { if (selectedIds.isNotEmpty()) confirmDeleteSelected = true }) { Icon(Icons.Default.Delete, tr("Delete", "حذف"), tint = DangerColor) }
+                            IconButton(onClick = { selectMode = false; selectedIds = emptySet() }) { Icon(Icons.Default.Close, tr("Cancel", "إلغاء"), tint = TextSecondary) }
+                        }
+                    }
 
                     LazyColumn(Modifier.weight(1f)) {
                         if (pinned.isNotEmpty()) {
                             item { Text(tr("Pinned", "المثبتة"), color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp)) }
                             items(pinned, key = { "p${it.id}" }) { chat ->
-                                ChatRow(chat, chat.id == activeId, onClick = { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }, onLongPress = {})
+                                ChatRow(chat, chat.id == activeId,
+                                    onClick = {
+                                        if (selectMode) selectedIds = if (chat.id in selectedIds) selectedIds - chat.id else selectedIds + chat.id
+                                        else { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }
+                                    },
+                                    onLongPress = { if (selectMode) selectedIds = selectedIds + chat.id else menuChat = chat },
+                                    selectMode = selectMode, selected = chat.id in selectedIds)
                             }
                         }
                         val grouped = recent.groupBy { dateBucket(it.timestamp) }.toSortedMap()
                         grouped.forEach { (bucket, list) ->
                             item { Text(bucketLabels[bucket], color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp)) }
                             items(list, key = { "r${it.id}" }) { chat ->
-                                ChatRow(chat, chat.id == activeId, onClick = { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }, onLongPress = {})
+                                ChatRow(chat, chat.id == activeId,
+                                    onClick = {
+                                        if (selectMode) selectedIds = if (chat.id in selectedIds) selectedIds - chat.id else selectedIds + chat.id
+                                        else { vm.selectConversation(chat.id); scope.launch { drawerState.close() } }
+                                    },
+                                    onLongPress = { if (selectMode) selectedIds = selectedIds + chat.id else menuChat = chat },
+                                    selectMode = selectMode, selected = chat.id in selectedIds)
                             }
                         }
                     }
@@ -2107,8 +2125,8 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { scope.launch { drawerState.close() }; onNavigateToSettings() }.padding(vertical = 12.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(Modifier.size(36.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
-                            Text(vm.auth.value.username.firstOrNull()?.uppercase() ?: "?", color = OnAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Box(Modifier.size(38.dp).background(AccentBrush, CircleShape), contentAlignment = Alignment.Center) {
+                            Text(auth.username.firstOrNull()?.uppercase() ?: "?", color = OnAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
@@ -2122,46 +2140,29 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
         }
     ) {
         Scaffold(
-            containerColor = OledBlack,
+            containerColor = Color.Transparent,
             topBar = {
-                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, tr("Menu", "القائمة"), tint = TextPrimary) }
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    GlassIconButton(Icons.Default.Menu, tr("Menu", "القائمة"), { scope.launch { drawerState.open() } })
+                    Column(Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(chatTitle, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    Box {
-                        IconButton(onClick = { showTopMenu = true }) {
-                            Icon(Icons.Default.MoreVert, tr("More", "المزيد"), tint = TextPrimary)
-                        }
-                        DropdownMenu(expanded = showTopMenu, onDismissRequest = { showTopMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text(tr("Export chat", "تصدير المحادثة")) },
-                                onClick = {
-                                    showTopMenu = false
-                                    val exported = messages.joinToString("\n\n") { m ->
-                                        (if (m.isUser) tr("You", "أنت") else "AI") + ":\n" + m.content
-                                    }
-                                    if (exported.isBlank()) {
-                                        Toast.makeText(context, tr("Nothing to export yet", "لا توجد رسائل بعد"), Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        val intent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_TEXT, exported)
-                                        }
-                                        try {
-                                            context.startActivity(Intent.createChooser(intent, tr("Share", "مشاركة")))
-                                        } catch (e: Exception) {
-                                            Toast.makeText(context, "Error sharing", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
-                            )
+                        Spacer(Modifier.height(3.dp))
+                        Row(
+                            Modifier.clip(RoundedCornerShape(50)).background(AccentBlue.copy(alpha = 0.16f)).border(1.dp, AccentBlue.copy(alpha = 0.40f), RoundedCornerShape(50))
+                                .clickable { showModelSheet = true }.padding(horizontal = 10.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(Modifier.size(6.dp).background(AccentTwo, CircleShape))
+                            Spacer(Modifier.width(6.dp))
+                            Text(selectedModel.name, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 190.dp))
+                            Icon(Icons.Default.KeyboardArrowDown, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
                         }
                     }
+                    GlassIconButton(Icons.Default.Add, tr("New chat", "محادثة جديدة"), { vm.createNewConversation() })
                 }
             },
             bottomBar = {
-                Column(Modifier.background(OledBlack)) {
+                Column {
                     if (attachmentUri != null) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).background(SecondarySurface, RoundedCornerShape(14.dp)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (attachmentMime.startsWith("image/")) {
@@ -2204,7 +2205,7 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                             visible = showJump, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut(),
                             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
                         ) {
-                            SmallFloatingActionButton(onClick = { scope.launch { listState.animateScrollToItem((totalItems - 1).coerceAtLeast(0)); stickToBottom = true } }, containerColor = ElevatedSurface, contentColor = TextPrimary) {
+                            SmallFloatingActionButton(onClick = { scope.launch { listState.scrollToItem((totalItems - 1).coerceAtLeast(0)); listState.scrollBy(100000f); stickToBottom = true } }, containerColor = CardDark, contentColor = AccentBlue) {
                                 Icon(Icons.Default.KeyboardArrowDown, tr("Scroll to bottom", "الانتقال للأسفل"))
                             }
                         }
@@ -2212,6 +2213,81 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                 }
             }
         }
+    }
+
+    if (showModelSheet) {
+        val accountLabels = remember(models) { AccountStore.load(context).associate { it.id to it.label } }
+        ModalBottomSheet(onDismissRequest = { showModelSheet = false }, containerColor = CardDark) {
+            Text(tr("Choose a model", "اختر النموذج"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            LazyColumn(Modifier.heightIn(max = 460.dp).padding(horizontal = 12.dp)) {
+                items(models, key = { it.accountId + "|" + it.id }) { m ->
+                    val isSelected = m.id == selectedModel.id && m.accountId == selectedModel.accountId
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.selectModel(m); showModelSheet = false }.padding(horizontal = 10.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(m.name, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(if (m.accountId.isEmpty()) "Puter" else accountLabels[m.accountId] ?: m.accountId, color = TextMuted, fontSize = 11.sp)
+                        }
+                        if (isSelected) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    menuChat?.let { chat ->
+        ModalBottomSheet(onDismissRequest = { menuChat = null }, containerColor = CardDark) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+                Text(chat.title, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(8.dp))
+                SheetAction(Icons.Default.Edit, tr("Rename", "إعادة التسمية")) { renameText = chat.title; renameTarget = chat; menuChat = null }
+                SheetAction(Icons.Default.PushPin, if (chat.isPinned) tr("Unpin", "إلغاء التثبيت") else tr("Pin", "تثبيت")) { vm.togglePin(chat.id, !chat.isPinned); menuChat = null }
+                SheetAction(Icons.Default.Share, tr("Export chat", "تصدير المحادثة")) {
+                    menuChat = null
+                    scope.launch {
+                        val exported = vm.exportChatText(chat.id)
+                        if (exported.isBlank()) Toast.makeText(context, tr("Nothing to export yet", "لا توجد رسائل بعد"), Toast.LENGTH_SHORT).show()
+                        else chatShareText(context, exported)
+                    }
+                }
+                SheetAction(Icons.Default.CheckCircle, tr("Select multiple", "تحديد متعدد")) { selectMode = true; selectedIds = setOf(chat.id); menuChat = null }
+                SheetAction(Icons.Default.Delete, tr("Delete", "حذف"), danger = true) { deleteTarget = chat; menuChat = null }
+            }
+        }
+    }
+
+    renameTarget?.let { chat ->
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            containerColor = CardDark,
+            title = { Text(tr("Rename chat", "إعادة تسمية المحادثة"), color = TextPrimary) },
+            text = { OutlinedTextField(value = renameText, onValueChange = { renameText = it }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
+            confirmButton = { TextButton(onClick = { vm.renameChat(chat.id, renameText); renameTarget = null }) { Text(tr("Save", "حفظ"), color = AccentBlue) } },
+            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
+        )
+    }
+
+    deleteTarget?.let { chat ->
+        ConfirmDialog(
+            title = tr("Delete this chat?", "حذف هذه المحادثة؟"),
+            message = tr("\"${chat.title}\" will be deleted. It cannot be undone.", "سيتم حذف \"${chat.title}\". لا يمكن التراجع."),
+            confirmLabel = tr("Delete", "حذف"), danger = true,
+            onConfirm = { vm.deleteChat(chat.id); deleteTarget = null },
+            onDismiss = { deleteTarget = null }
+        )
+    }
+
+    if (confirmDeleteSelected) {
+        ConfirmDialog(
+            title = tr("Delete ${selectedIds.size} chats?", "حذف ${selectedIds.size} محادثات؟"),
+            message = tr("The selected chats will be deleted. It cannot be undone.", "سيتم حذف المحادثات المحددة. لا يمكن التراجع."),
+            confirmLabel = tr("Delete", "حذف"), danger = true,
+            onConfirm = { selectedIds.forEach { vm.deleteChat(it) }; selectedIds = emptySet(); selectMode = false; confirmDeleteSelected = false },
+            onDismiss = { confirmDeleteSelected = false }
+        )
     }
 
     if (showAttachmentSheet) {
@@ -2429,6 +2505,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
 
     fun selectConversation(id: Int) { _activeConversationId.value = id }
     fun deleteChat(id: Int) { cancelRequestsFor(id); viewModelScope.launch { chatDao.clearChat(id); conversationDao.deleteConversation(id) } }
+    suspend fun exportChatText(id: Int): String = chatDao.getMessagesOnce(id).joinToString("\n\n") { (if (it.role == "user") "You" else "AI") + ":\n" + it.content }
     fun renameChat(id: Int, newTitle: String) { val clean = newTitle.trim(); if (clean.isNotEmpty()) viewModelScope.launch { conversationDao.updateTitle(id, clean) } }
     fun togglePin(id: Int, isPinned: Boolean) { viewModelScope.launch { conversationDao.updatePin(id, isPinned) } }
     fun reportMessage(messageId: Int, content: String) { val conversationId = _activeConversationId.value ?: return; viewModelScope.launch(Dispatchers.IO) { db.reportDao().insert(ReportEntity(messageId = messageId, conversationId = conversationId, content = content)) } }
@@ -2570,10 +2647,10 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
         val mem = _memories.value.take(20)
         if (mem.isNotEmpty()) { system.append("\n\nKnown facts about the user:\n"); mem.forEach { system.append("- ").append(it.content.take(300)).append('\n') } }
         
-        if (WorkspaceManager.isLoaded) {
+        if (WorkspaceManager.isLoaded && prefs.getBoolean("use_workspace_context", false)) {
             system.append("\n\nActive repository: ").append(WorkspaceManager.activeRepo).append('\n')
             var budget = 60000
-            for ((path, content) in WorkspaceManager.projectFiles) {
+            for ((path, content) in WorkspaceManager.projectFiles.toSortedMap()) {
                 if (budget <= 0) break
                 val chunk = content.take(minOf(budget, 6000))
                 system.append("\n=== ").append(path).append(" ===\n").append(chunk).append('\n')
@@ -2638,8 +2715,15 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         val bitmap = BitmapFactory.decodeFile(file.absolutePath, opts) ?: return null
         val out = ByteArrayOutputStream()
-        val format = if (bitmap.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
-        bitmap.compress(format, 85, out); bitmap.recycle()
+        val flat = if (bitmap.hasAlpha()) {
+            val background = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(background)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            canvas.drawBitmap(bitmap, 0f, 0f, null)
+            bitmap.recycle()
+            background
+        } else bitmap
+        flat.compress(Bitmap.CompressFormat.JPEG, 85, out); flat.recycle()
         return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
 
@@ -2807,15 +2891,9 @@ package com.hiyako.app.ui.screens
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -2826,133 +2904,67 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hiyako.app.ui.i18n.tr
 import com.hiyako.app.ui.theme.AccentBlue
-import com.hiyako.app.ui.theme.AccentBrush
-import com.hiyako.app.ui.theme.AccentThree
-import com.hiyako.app.ui.theme.AccentTwo
 import com.hiyako.app.ui.theme.Brand
-import com.hiyako.app.ui.theme.OnAccent
 import com.hiyako.app.ui.theme.TextMuted
 import com.hiyako.app.ui.theme.TextPrimary
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Animated launch screen: pulse rings, a colour ring that draws itself, orbiting lights and a logo that
- * springs in. It plays over the app's aurora background, then fades out into the app.
- */
+/** Quiet launch screen: the mark fades in, then the name, then everything fades out into the app. */
 @Composable
 fun SplashScreen(onFinished: () -> Unit) {
-    val pop = remember { Animatable(0f) }
-    val ring = remember { Animatable(0f) }
-    val title = remember { Animatable(0f) }
+    val mark = remember { Animatable(0f) }
+    val name = remember { Animatable(0f) }
     val tagline = remember { Animatable(0f) }
     val exit = remember { Animatable(0f) }
-    val transition = rememberInfiniteTransition(label = "splash")
-    val spin by transition.animateFloat(0f, 360f, infiniteRepeatable(tween(3000, easing = LinearEasing)), label = "spin")
-    val wave by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "wave")
 
     LaunchedEffect(Unit) {
         coroutineScope {
-            launch { pop.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessLow)) }
-            launch { ring.animateTo(1f, tween(1500, easing = FastOutSlowInEasing)) }
-            launch { delay(650); title.animateTo(1f, tween(700, easing = FastOutSlowInEasing)) }
-            launch { delay(1000); tagline.animateTo(1f, tween(600)) }
+            launch { mark.animateTo(1f, tween(700, easing = FastOutSlowInEasing)) }
+            launch { delay(350); name.animateTo(1f, tween(600, easing = FastOutSlowInEasing)) }
+            launch { delay(700); tagline.animateTo(1f, tween(600)) }
         }
-        delay(500)
-        exit.animateTo(1f, tween(450))
+        delay(450)
+        exit.animateTo(1f, tween(400))
         onFinished()
     }
 
     Box(
-        Modifier.fillMaxSize().graphicsLayer {
-            alpha = 1f - exit.value
-            scaleX = 1f + exit.value * 0.12f
-            scaleY = 1f + exit.value * 0.12f
-        },
+        Modifier.fillMaxSize().graphicsLayer { alpha = 1f - exit.value },
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
-                Canvas(Modifier.size(280.dp)) {
-                    val center = Offset(size.width / 2f, size.height / 2f)
-                    val baseRadius = 74.dp.toPx()
-                    for (k in 0..2) {
-                        val phase = (wave + k / 3f) % 1f
-                        drawCircle(
-                            color = AccentBlue.copy(alpha = (1f - phase) * 0.35f),
-                            radius = baseRadius + phase * 62.dp.toPx(),
-                            center = center,
-                            style = Stroke(width = 2.dp.toPx())
-                        )
+            Box(
+                Modifier
+                    .size(96.dp)
+                    .graphicsLayer {
+                        alpha = mark.value
+                        scaleX = 0.92f + 0.08f * mark.value
+                        scaleY = 0.92f + 0.08f * mark.value
                     }
-                    val ringRadius = 86.dp.toPx()
-                    drawArc(
-                        brush = Brush.sweepGradient(listOf(AccentBlue, AccentTwo, AccentThree, AccentBlue), center),
-                        startAngle = -90f,
-                        sweepAngle = 360f * ring.value,
-                        useCenter = false,
-                        topLeft = Offset(center.x - ringRadius, center.y - ringRadius),
-                        size = Size(ringRadius * 2f, ringRadius * 2f),
-                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
-                    )
-                    val orbit = 104.dp.toPx()
-                    val colors = listOf(AccentBlue, AccentTwo, AccentThree)
-                    for (k in 0..2) {
-                        val angle = Math.toRadians((spin + k * 120f).toDouble())
-                        val dot = Offset(
-                            center.x + (Math.cos(angle) * orbit).toFloat(),
-                            center.y + (Math.sin(angle) * orbit).toFloat()
-                        )
-                        drawCircle(
-                            brush = Brush.radialGradient(listOf(colors[k].copy(alpha = 0.9f), colors[k].copy(alpha = 0f)), center = dot, radius = 16.dp.toPx()),
-                            radius = 16.dp.toPx(),
-                            center = dot
-                        )
-                        drawCircle(color = colors[k], radius = 4.dp.toPx(), center = dot)
-                    }
-                }
-                Box(
-                    Modifier
-                        .size(112.dp)
-                        .graphicsLayer {
-                            scaleX = pop.value
-                            scaleY = pop.value
-                            rotationZ = (1f - pop.value.coerceIn(0f, 1f)) * -120f
-                        }
-                        .background(AccentBrush, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("✦", color = OnAccent, fontSize = 50.sp)
-                }
+                    .background(AccentBlue.copy(alpha = 0.14f), CircleShape)
+                    .border(1.dp, AccentBlue.copy(alpha = 0.45f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✦", color = AccentBlue, fontSize = 40.sp)
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(22.dp))
             Text(
                 tr(Brand.EN, Brand.AR),
                 color = TextPrimary,
-                fontSize = 38.sp,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.graphicsLayer {
-                    alpha = title.value
-                    translationY = (1f - title.value) * 40f
-                    scaleX = 0.85f + 0.15f * title.value
-                    scaleY = 0.85f + 0.15f * title.value
-                }
+                fontSize = 30.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.graphicsLayer { alpha = name.value; translationY = (1f - name.value) * 10f }
             )
             Spacer(Modifier.height(8.dp))
             Text(
@@ -3236,6 +3248,7 @@ FILE: ./app/src/main/java/com/hiyako/app/ui/screens/SettingsScreen.kt
 
 package com.hiyako.app.ui.screens
 
+import com.hiyako.app.ui.theme.Brand
 import kotlinx.coroutines.flow.first
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Brush
@@ -3331,14 +3344,14 @@ fun SettingsScreen(
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-        containerColor = OledBlack,
+        containerColor = Color.Transparent,
         topBar = {
             LargeTopAppBar(
                 title = { Text(tr("Settings", "الإعدادات")) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("Back", "رجوع")) } },
                 scrollBehavior = scroll,
                 colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = OledBlack, scrolledContainerColor = DeepSurface,
+                    containerColor = Color.Transparent, scrolledContainerColor = DeepSurface.copy(alpha = 0.92f),
                     titleContentColor = TextPrimary, navigationIconContentColor = TextPrimary
                 )
             )
@@ -3355,11 +3368,12 @@ fun SettingsScreen(
             // 1) Account Card
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                    .background(Brush.linearGradient(listOf(AccentBlue.copy(alpha = 0.25f), SecondarySurface)))
+                    .background(SecondarySurface)
+                    .border(1.dp, BorderColor, RoundedCornerShape(20.dp))
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(Modifier.size(52.dp).background(AccentBlue, CircleShape), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(54.dp).background(AccentBrush, CircleShape), contentAlignment = Alignment.Center) {
                     Text(auth.username.firstOrNull()?.uppercase() ?: "✦", color = OnAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.width(14.dp))
@@ -3389,7 +3403,7 @@ fun SettingsScreen(
                         items(AppPalettes.all, key = { it.id }) { p ->
                             Column(Modifier.width(100.dp)) {
                                 Column(
-                                    Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(16.dp)).background(if (p.id == "paper") Color(0xFFFFFFFF) else Color(0xFF000000))
+                                    Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(16.dp)).background(p.base)
                                         .border(if (ThemeState.palette.id == p.id) 2.dp else 1.dp, if (ThemeState.palette.id == p.id) p.accent else p.border, RoundedCornerShape(16.dp))
                                         .clickable { ThemeState.select(context, p.id) }.padding(10.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -3464,7 +3478,7 @@ fun SettingsScreen(
                 SettingsRow(Icons.Outlined.DeleteForever, tr("Delete all data on this device", "حذف كل البيانات على هذا الجهاز"), danger = true, showDivider = false, onClick = { confirmWipe = true })
             }
 
-            Text("Hiyako $versionLabel", color = TextMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center)
+            Text("${tr(Brand.EN, Brand.AR)} $versionLabel", color = TextMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center)
             Spacer(Modifier.height(24.dp))
         }
     }

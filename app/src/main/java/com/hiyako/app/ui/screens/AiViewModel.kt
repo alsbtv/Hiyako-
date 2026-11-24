@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.content.SharedPreferences
 import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.util.Base64
@@ -144,10 +145,16 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
     fun speak(text: String) {
         val clean = text.replace(Regex("```[\\s\\S]*?```"), " ").replace("*", "").replace("#", "").replace("`", "").trim().take(3500)
         if (clean.isEmpty()) return
-        tts?.language = if (isRtlText(clean)) Locale("ar") else Locale.getDefault()
+        tts?.language = when (prefs.getString("speech_lang", "auto")) {
+            "ar" -> Locale("ar")
+            "en" -> Locale.ENGLISH
+            else -> if (isRtlText(clean)) Locale("ar") else Locale.getDefault()
+        }
+        tts?.setSpeechRate(prefs.getFloat("speech_rate", 1f))
         tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "nexus_tts")
     }
 
+    fun setFontSize(value: Float) { fontSize = value.coerceIn(0.85f, 1.4f); prefs.edit().putFloat("fontSize", fontSize).apply() }
     fun toggleThink() { isThinkingMode = !isThinkingMode }
     fun toggleSearch() { isSearchMode = !isSearchMode }
     fun selectModel(model: AiModel) { _selectedModel.value = model; prefs.edit().putString("model_id", model.id).putString("model_name", model.name).putString("model_account", model.accountId).apply() }
@@ -302,7 +309,9 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
                 val result = OpenAiCompatClient.stream(
                     baseUrl = account.baseUrl, apiKey = AccountStore.apiKey(account),
                     model = if (account.id == accountId) modelId else defaultModelOf(appCtx, account),
-                    messages = messages
+                    messages = messages,
+                    temperature = toneTemperatureOf(prefs),
+                    maxTokens = prefs.getInt("max_tokens", 0)
                 ) { delta -> if (!pending.containsKey(reqId)) throw CancellationException("Stopped") else onChunk(reqId, delta) }
                 if (result.isSuccess) { onDone(reqId); return@launch }
                 lastError = result.exceptionOrNull()
@@ -329,8 +338,10 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
 
     private fun buildRequest(entities: List<ChatEntity>): BuiltRequest {
         val system = StringBuilder()
-        system.append("You are Hiyako, a helpful assistant. Reply in the same language as the user's last message. Use Markdown for formatting and fenced code blocks for code.")
-        val mem = _memories.value.take(20)
+        system.append("You are Nexus, a helpful assistant. Reply in the same language as the user's last message. Use Markdown for formatting and fenced code blocks for code.")
+        val custom = prefs.getString("custom_instruction", "")?.trim().orEmpty()
+        if (custom.isNotEmpty()) system.append("\n\nThe user's standing instructions:\n").append(custom.take(1500))
+        val mem = if (prefs.getBoolean("use_memory", true)) _memories.value.take(20) else emptyList()
         if (mem.isNotEmpty()) { system.append("\n\nKnown facts about the user:\n"); mem.forEach { system.append("- ").append(it.content.take(300)).append('\n') } }
         
         if (WorkspaceManager.isLoaded && prefs.getBoolean("use_workspace_context", false)) {
@@ -349,7 +360,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
 
         val arr = JSONArray()
         arr.put(JSONObject().put("role", "system").put("content", system.toString()))
-        val recent = entities.filterNot { it.role == "ai" && it.content == "Thinking..." }.takeLast(30)
+        val recent = entities.filterNot { it.role == "ai" && it.content == "Thinking..." }.takeLast(prefs.getInt("context_limit", 30).coerceIn(4, 60))
 
         for (e in recent) {
             val role = if (e.role == "user") "user" else "assistant"
@@ -482,3 +493,10 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
 
 private fun accountModelsOf(context: Context): List<AiModel> =
     AccountStore.load(context).flatMap { account -> ModelCache.models(context, account.id).map { modelId -> AiModel(name = "$modelId · ${account.label}", id = modelId, accountId = account.id) } }
+
+/** Sampling temperature for the chosen response style. */
+private fun toneTemperatureOf(prefs: SharedPreferences): Double = when (prefs.getString("tone", "Balanced")) {
+    "Precise" -> 0.2
+    "Creative" -> 1.1
+    else -> 0.7
+}

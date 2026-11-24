@@ -35,22 +35,6 @@ object ProviderCatalog {
             note = "Sign in with Puter. No API key needed; usage follows your Puter account credits."
         ),
         ProviderSpec(
-            id = "freeaiapikey",
-            name = "FreeAIapikey",
-            baseUrl = "",
-            defaultModel = "",
-            editableBaseUrl = true,
-            note = "Endpoint not verified yet. Enter the base URL from the provider's docs."
-        ),
-        ProviderSpec(
-            id = "agentrouter",
-            name = "AgentRouter",
-            baseUrl = "",
-            defaultModel = "",
-            editableBaseUrl = true,
-            note = "Endpoint not verified yet. Enter the base URL from the provider's docs."
-        ),
-        ProviderSpec(
             id = "github",
             name = "GitHub Models",
             baseUrl = "https://models.github.ai/inference",
@@ -118,14 +102,6 @@ object ProviderCatalog {
             name = "Hugging Face",
             baseUrl = "https://router.huggingface.co/v1",
             defaultModel = "meta-llama/Llama-3.1-8B-Instruct"
-        ),
-        ProviderSpec(
-            id = "anakin",
-            name = "Anakin.ai",
-            baseUrl = "",
-            defaultModel = "",
-            editableBaseUrl = true,
-            note = "Endpoint not verified yet. Enter the base URL from the provider's docs."
         ),
         ProviderSpec(
             id = CUSTOM,

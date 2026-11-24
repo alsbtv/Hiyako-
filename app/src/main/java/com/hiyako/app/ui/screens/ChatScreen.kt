@@ -3,8 +3,13 @@ package com.hiyako.app.ui.screens
 import com.hiyako.app.ui.theme.Brand
 import androidx.compose.foundation.layout.statusBarsPadding
 import com.hiyako.app.providers.AccountStore
+import android.content.Context
 import androidx.compose.foundation.gestures.scrollBy
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.net.Uri
+import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -48,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.hiyako.app.data.db.ConversationEntity
 import com.hiyako.app.ui.components.*
+import com.hiyako.app.ui.i18n.Lang
 import com.hiyako.app.ui.i18n.tr
 import com.hiyako.app.ui.theme.*
 import com.hiyako.app.util.queryDisplayName
@@ -189,6 +195,31 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) attachmentUri = uri }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) attachmentUri = uri }
 
+    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+            if (spoken.isNotBlank()) input = if (input.isBlank()) spoken else input.trimEnd() + " " + spoken
+        }
+    }
+    val startVoice: () -> Unit = {
+        val pref = context.getSharedPreferences("nexus_settings", Context.MODE_PRIVATE).getString("voice_input_lang", "auto")
+        val tag = when (pref) {
+            "ar" -> "ar-SA"
+            "en" -> "en-US"
+            else -> if (Lang.arabic) "ar-SA" else "en-US"
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, tr("Speak now", "تكلّم الآن"))
+        }
+        try {
+            voiceLauncher.launch(intent)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(context, tr("No speech recognition service on this device.", "لا توجد خدمة تعرّف على الصوت في هذا الجهاز."), Toast.LENGTH_LONG).show()
+        }
+    }
+
     val listState = rememberLazyListState()
 
     LaunchedEffect(listState) {
@@ -329,7 +360,8 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                     ComposerBar(
                         input = input, onInputChange = { input = it }, onSend = send, onStop = { vm.stopGeneration() },
                         isGenerating = isGenerating, canSend = input.isNotBlank() || attachmentUri != null, onAttachClick = { showAttachmentSheet = true },
-                        isThinking = vm.isThinkingMode, onThinkClick = { vm.toggleThink() }, isSearch = vm.isSearchMode, onSearchClick = { vm.toggleSearch() }
+                        isThinking = vm.isThinkingMode, onThinkClick = { vm.toggleThink() }, isSearch = vm.isSearchMode, onSearchClick = { vm.toggleSearch() },
+                        onMicClick = startVoice
                     )
                 }
             }
@@ -367,25 +399,101 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
     }
 
     if (showModelSheet) {
-        val accountLabels = remember(models) { AccountStore.load(context).associate { it.id to it.label } }
+        val savedAccounts = remember { AccountStore.load(context).filter { AccountStore.apiKey(it).isNotBlank() } }
+        var pickedProvider by remember { mutableStateOf<String?>(null) }
+        var providerMenu by remember { mutableStateOf(false) }
+        var modelQuery by remember { mutableStateOf("") }
+        val hasProviders = savedAccounts.isNotEmpty() || auth.signedIn
+        val providerLabel = when (pickedProvider) {
+            null -> tr("All providers", "كل المزودين")
+            "" -> "Puter"
+            else -> savedAccounts.firstOrNull { it.id == pickedProvider }?.label ?: tr("All providers", "كل المزودين")
+        }
+        val visibleModels = models.filter { m ->
+            val allowed = if (m.accountId.isEmpty()) auth.signedIn else savedAccounts.any { it.id == m.accountId }
+            val matchesProvider = pickedProvider == null || m.accountId == pickedProvider
+            val matchesQuery = modelQuery.isBlank() || m.id.contains(modelQuery, true) || m.name.contains(modelQuery, true)
+            allowed && matchesProvider && matchesQuery
+        }
         ModalBottomSheet(onDismissRequest = { showModelSheet = false }, containerColor = CardDark) {
-            Text(tr("Choose a model", "اختر النموذج"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-            LazyColumn(Modifier.heightIn(max = 460.dp).padding(horizontal = 12.dp)) {
-                items(models, key = { it.accountId + "|" + it.id }) { m ->
-                    val isSelected = m.id == selectedModel.id && m.accountId == selectedModel.accountId
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.selectModel(m); showModelSheet = false }.padding(horizontal = 10.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(m.name, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(if (m.accountId.isEmpty()) "Puter" else accountLabels[m.accountId] ?: m.accountId, color = TextMuted, fontSize = 11.sp)
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                Text(tr("Choose a model", "اختر النموذج"), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+                if (!hasProviders) {
+                    EmptyState(
+                        icon = Icons.Outlined.Key,
+                        title = tr("No providers yet", "لا يوجد مزودون بعد"),
+                        message = tr("Add an API key in Settings or sign in to Puter to see models here.", "أضف مفتاح API من الإعدادات أو سجّل الدخول إلى Puter لتظهر النماذج هنا."),
+                        actionLabel = tr("Open settings", "فتح الإعدادات"),
+                        onAction = { showModelSheet = false; onNavigateToSettings() }
+                    )
+                } else {
+                    Box {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ElevatedSurface)
+                                .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                                .clickable { providerMenu = true }.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Outlined.Dns, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(tr("Provider", "المزوّد"), color = TextMuted, fontSize = 11.sp)
+                                Text(providerLabel, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSecondary)
                         }
-                        if (isSelected) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                        DropdownMenu(expanded = providerMenu, onDismissRequest = { providerMenu = false }, modifier = Modifier.background(CardDark)) {
+                            DropdownMenuItem(
+                                text = { Text(tr("All providers", "كل المزودين"), color = TextPrimary) },
+                                onClick = { pickedProvider = null; providerMenu = false },
+                                trailingIcon = { if (pickedProvider == null) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(18.dp)) }
+                            )
+                            if (auth.signedIn) {
+                                DropdownMenuItem(
+                                    text = { Text("Puter", color = TextPrimary) },
+                                    onClick = { pickedProvider = ""; providerMenu = false },
+                                    trailingIcon = { if (pickedProvider == "") Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(18.dp)) }
+                                )
+                            }
+                            savedAccounts.forEach { account ->
+                                DropdownMenuItem(
+                                    text = { Text(account.label, color = TextPrimary) },
+                                    onClick = { pickedProvider = account.id; providerMenu = false },
+                                    trailingIcon = { if (pickedProvider == account.id) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(18.dp)) }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    SearchField(modelQuery, { modelQuery = it }, tr("Search models", "ابحث عن نموذج"))
+                    Spacer(Modifier.height(6.dp))
+                    if (visibleModels.isEmpty()) {
+                        Text(
+                            tr("No models found for this provider. Open Settings and refresh its model list.", "لا توجد نماذج لهذا المزوّد. افتح الإعدادات وحدّث قائمة النماذج."),
+                            color = TextSecondary, fontSize = 14.sp, lineHeight = 22.sp, modifier = Modifier.padding(vertical = 20.dp, horizontal = 4.dp)
+                        )
+                    } else {
+                        LazyColumn(Modifier.heightIn(max = 400.dp)) {
+                            items(visibleModels, key = { it.accountId + "|" + it.id }) { m ->
+                                val isSelected = m.id == selectedModel.id && m.accountId == selectedModel.accountId
+                                val title = if (m.accountId.isEmpty()) m.name else m.id
+                                val owner = if (m.accountId.isEmpty()) "Puter" else savedAccounts.firstOrNull { it.id == m.accountId }?.label ?: ""
+                                Row(
+                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.selectModel(m); showModelSheet = false }.padding(horizontal = 10.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(title, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        if (pickedProvider == null) Text(owner, color = TextMuted, fontSize = 11.sp)
+                                    }
+                                    if (isSelected) Icon(Icons.Default.Check, null, tint = AccentBlue, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
                     }
                 }
+                Spacer(Modifier.height(24.dp))
             }
-            Spacer(Modifier.height(24.dp))
         }
     }
 

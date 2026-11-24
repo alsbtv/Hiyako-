@@ -4,22 +4,12 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Inner Glow Base -->
+    <!-- N monogram, inside the 66dp safe zone -->
     <path
-        android:pathData="M54,54m-42,0a42,42 0,1 1,84 0a42,42 0,1 1,-84 0"
-        android:fillColor="#1A1A1A"/>
+        android:pathData="M37,74 L37,34 L46,34 L62,55 L62,34 L71,34 L71,74 L62,74 L46,53 L46,74 Z"
+        android:fillColor="#E8E6E1"/>
+    <!-- Spark -->
     <path
-        android:pathData="M54,54m-38,0a38,38 0,1 1,76 0a38,38 0,1 1,-76 0"
-        android:fillColor="#8B5CF6"/>
-    <!-- H Shape -->
-    <path
-        android:pathData="M36,32 L46,32 L46,48 L62,48 L62,32 L72,32 L72,76 L62,76 L62,58 L46,58 L46,76 L36,76 Z"
-        android:fillColor="#FFFFFF"/>
-    <!-- AI Star / Sparkle -->
-    <path
-        android:pathData="M54,16 L57,24 L65,27 L57,30 L54,38 L51,30 L43,27 L51,24 Z"
-        android:fillColor="#FFFFFF"/>
-    <path
-        android:pathData="M68,40 L69,43 L72,44 L69,45 L68,48 L67,45 L64,44 L67,43 Z"
-        android:fillColor="#FFFFFF"/>
+        android:pathData="M77,27 L78.6,31.4 L83,33 L78.6,34.6 L77,39 L75.4,34.6 L71,33 L75.4,31.4 Z"
+        android:fillColor="#9DB8A5"/>
 </vector>

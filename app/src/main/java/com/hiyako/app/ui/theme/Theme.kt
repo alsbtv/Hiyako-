@@ -28,8 +28,8 @@ import com.hiyako.app.ui.i18n.Lang
 
 /** The app name shown on the splash screen, in the drawer and in Settings. Change it here only. */
 object Brand {
-    const val EN = "Hiyako"
-    const val AR = "هياكو"
+    const val EN = "Nexus"
+    const val AR = "نيكسوس"
 }
 
 data class AppPalette(

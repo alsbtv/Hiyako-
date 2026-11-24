@@ -70,6 +70,8 @@ object OpenAiCompatClient {
         apiKey: String,
         model: String,
         messages: JSONArray,
+        temperature: Double? = null,
+        maxTokens: Int = 0,
         onDelta: (String) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
@@ -77,6 +79,10 @@ object OpenAiCompatClient {
                 .put("model", model)
                 .put("messages", messages)
                 .put("stream", true)
+                .apply {
+                    if (temperature != null) put("temperature", temperature)
+                    if (maxTokens > 0) put("max_tokens", maxTokens)
+                }
             val builder = Request.Builder()
                 .url(baseUrl.trimEnd('/') + "/chat/completions")
                 .post(payload.toString().toRequestBody(jsonType))
