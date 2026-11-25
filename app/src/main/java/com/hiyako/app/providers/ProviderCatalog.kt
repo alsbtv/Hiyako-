@@ -7,9 +7,11 @@ import org.json.JSONObject
 import java.util.UUID
 
 /**
- * A provider the app knows how to talk to.
- * editableBaseUrl = true means the user must type or confirm the endpoint.
- * Endpoints marked "not verified" in note must be checked against the provider docs before release.
+ * A provider the app knows how to talk to. Every provider here has a free tier.
+ * baseUrl is fixed, so the user never types it (only Custom is editable).
+ * keyUrl is the page where the user creates an API key.
+ * needsAccountId is for services whose URL contains the user's account id (Cloudflare).
+ * fallbackModels are used when the provider has no /models endpoint.
  */
 data class ProviderSpec(
     val id: String,
@@ -18,7 +20,11 @@ data class ProviderSpec(
     val defaultModel: String,
     val needsKey: Boolean = true,
     val editableBaseUrl: Boolean = false,
-    val note: String = ""
+    val note: String = "",
+    val noteAr: String = "",
+    val keyUrl: String = "",
+    val needsAccountId: Boolean = false,
+    val fallbackModels: List<String> = emptyList()
 )
 
 object ProviderCatalog {
@@ -32,76 +38,110 @@ object ProviderCatalog {
             baseUrl = "",
             defaultModel = "",
             needsKey = false,
-            note = "Sign in with Puter. No API key needed; usage follows your Puter account credits."
-        ),
-        ProviderSpec(
-            id = "github",
-            name = "GitHub Models",
-            baseUrl = "https://models.github.ai/inference",
-            defaultModel = "openai/gpt-4.1-mini",
-            note = "Use a GitHub token with Models access."
+            note = "Sign in with Puter. No API key needed; usage follows your Puter account credits.",
+            noteAr = "سجّل الدخول بحساب Puter. لا يحتاج مفتاح API، والاستخدام يتبع رصيد حسابك."
         ),
         ProviderSpec(
             id = "groq",
             name = "Groq",
             baseUrl = "https://api.groq.com/openai/v1",
             defaultModel = "llama-3.3-70b-versatile",
-            note = "Fast inference with a free tier."
+            note = "Very fast. Free tier with rate limits.",
+            noteAr = "سريع جداً. طبقة مجانية بحدود استخدام.",
+            keyUrl = "https://console.groq.com/keys"
         ),
         ProviderSpec(
             id = "gemini",
             name = "Google AI Studio (Gemini)",
             baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai",
             defaultModel = "gemini-2.5-flash",
-            note = "Gemini through its OpenAI-compatible endpoint."
+            note = "Free tier with rate limits. On the free tier your prompts may be used to improve Google products.",
+            noteAr = "طبقة مجانية بحدود استخدام. في الطبقة المجانية قد تُستخدم رسائلك لتحسين منتجات Google.",
+            keyUrl = "https://aistudio.google.com/apikey"
+        ),
+        ProviderSpec(
+            id = "github",
+            name = "GitHub Models",
+            baseUrl = "https://models.github.ai/inference",
+            defaultModel = "openai/gpt-4.1-mini",
+            note = "Free with rate limits. Create a token with the Models permission.",
+            noteAr = "مجاني بحدود استخدام. أنشئ توكن بصلاحية Models.",
+            keyUrl = "https://github.com/settings/personal-access-tokens/new"
+        ),
+        ProviderSpec(
+            id = "openrouter",
+            name = "OpenRouter",
+            baseUrl = "https://openrouter.ai/api/v1",
+            defaultModel = "",
+            note = "One key for many models. Choose models ending in :free to avoid charges.",
+            noteAr = "مفتاح واحد لنماذج كثيرة. اختر النماذج التي تنتهي بـ :free لتجنب الرسوم.",
+            keyUrl = "https://openrouter.ai/keys"
         ),
         ProviderSpec(
             id = "nvidia",
             name = "NVIDIA NIM",
             baseUrl = "https://integrate.api.nvidia.com/v1",
             defaultModel = "meta/llama-3.3-70b-instruct",
-            note = "Hosted open models from NVIDIA."
-        ),
-        ProviderSpec(
-            id = "openrouter",
-            name = "OpenRouter",
-            baseUrl = "https://openrouter.ai/api/v1",
-            defaultModel = "openrouter/auto",
-            note = "One key for hundreds of models, including free ones."
-        ),
-        ProviderSpec(
-            id = "cloudflare",
-            name = "Cloudflare Workers AI",
-            baseUrl = "",
-            defaultModel = "@cf/meta/llama-3.1-8b-instruct",
-            editableBaseUrl = true,
-            note = "Base URL is https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
-        ),
-        ProviderSpec(
-            id = "requesty",
-            name = "Requesty",
-            baseUrl = "https://router.requesty.ai/v1",
-            defaultModel = "openai/gpt-4o-mini",
-            note = "Router that exposes many models behind one key."
-        ),
-        ProviderSpec(
-            id = "mistral",
-            name = "Mistral AI",
-            baseUrl = "https://api.mistral.ai/v1",
-            defaultModel = "mistral-small-latest"
+            note = "Hosted open models with free access for developers.",
+            noteAr = "نماذج مفتوحة مستضافة مع وصول مجاني للمطورين.",
+            keyUrl = "https://build.nvidia.com/settings/api-keys"
         ),
         ProviderSpec(
             id = "cerebras",
             name = "Cerebras",
             baseUrl = "https://api.cerebras.ai/v1",
             defaultModel = "llama3.1-8b",
-            note = "Very fast inference."
+            note = "Very fast inference. Free tier with limits.",
+            noteAr = "استدلال سريع جداً. طبقة مجانية بحدود.",
+            keyUrl = "https://cloud.cerebras.ai/"
+        ),
+        ProviderSpec(
+            id = "mistral",
+            name = "Mistral AI",
+            baseUrl = "https://api.mistral.ai/v1",
+            defaultModel = "mistral-small-latest",
+            note = "Free plan with rate limits. On the free plan your data may be used to train their models.",
+            noteAr = "خطة مجانية بحدود استخدام. في الخطة المجانية قد تُستخدم بياناتك لتدريب نماذجهم.",
+            keyUrl = "https://console.mistral.ai/api-keys"
+        ),
+        ProviderSpec(
+            id = "cohere",
+            name = "Cohere",
+            baseUrl = "https://api.cohere.ai/compatibility/v1",
+            defaultModel = "command-a-03-2025",
+            note = "Free trial key with a monthly call limit.",
+            noteAr = "مفتاح تجريبي مجاني بحد شهري للطلبات.",
+            keyUrl = "https://dashboard.cohere.com/api-keys",
+            fallbackModels = listOf("command-a-03-2025", "command-r-plus-08-2024", "command-r-08-2024", "command-r7b-12-2024")
+        ),
+        ProviderSpec(
+            id = "cloudflare",
+            name = "Cloudflare Workers AI",
+            baseUrl = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
+            defaultModel = "@cf/meta/llama-3.1-8b-instruct",
+            note = "Free daily allowance on Workers AI. Needs your Cloudflare Account ID and an API token.",
+            noteAr = "حصة يومية مجانية على Workers AI. يحتاج معرّف حساب Cloudflare وتوكن API.",
+            keyUrl = "https://dash.cloudflare.com/profile/api-tokens",
+            needsAccountId = true,
+            fallbackModels = listOf("@cf/meta/llama-3.1-8b-instruct", "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "@cf/mistralai/mistral-small-3.1-24b-instruct")
+        ),
+        ProviderSpec(
+            id = "requesty",
+            name = "Requesty",
+            baseUrl = "https://router.requesty.ai/v1",
+            defaultModel = "",
+            note = "Free models with a daily request limit. Paid models need credit.",
+            noteAr = "نماذج مجانية بحد يومي للطلبات. النماذج المدفوعة تحتاج رصيداً.",
+            keyUrl = "https://app.requesty.ai/api-keys"
         ),
         ProviderSpec(
             id = "huggingface",
             name = "Hugging Face",
             baseUrl = "https://router.huggingface.co/v1",
-            defaultModel = "meta-llama/Llama-3.1-8B-Instruct"
+            defaultModel = "meta-llama/Llama-3.1-8B-Instruct",
+            note = "Free with community rate limits.",
+            noteAr = "مجاني بحدود يحددها المجتمع.",
+            keyUrl = "https://huggingface.co/settings/tokens"
         ),
         ProviderSpec(
             id = CUSTOM,
@@ -109,7 +149,8 @@ object ProviderCatalog {
             baseUrl = "",
             defaultModel = "",
             editableBaseUrl = true,
-            note = "Any service with a /chat/completions endpoint. Base URL must start with https://"
+            note = "Any service with a /chat/completions endpoint. Base URL must start with https://",
+            noteAr = "أي خدمة فيها /chat/completions. يجب أن يبدأ الرابط بـ https://"
         )
     )
 

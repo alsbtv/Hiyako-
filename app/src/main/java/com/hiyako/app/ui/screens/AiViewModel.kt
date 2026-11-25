@@ -26,6 +26,7 @@ import com.hiyako.app.data.db.MemoryEntity
 import com.hiyako.app.data.db.ReportEntity
 import com.hiyako.app.engine.PuterEngine
 import com.hiyako.app.engine.PuterListener
+import com.hiyako.app.ui.i18n.tr
 import com.hiyako.app.util.isRtlText
 import com.hiyako.app.util.queryDisplayName
 import com.hiyako.app.providers.AccountStore
@@ -241,11 +242,10 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
                 chatDao.insertMessage(ChatEntity(conversationId = convoId, role = "user", content = trimmed, messageType = type, attachmentUri = storedUri, senderName = displayName))
                 conversationDao.touch(convoId, System.currentTimeMillis())
                 if (needsTitle) {
-                    val seed = if (trimmed.isNotEmpty()) trimmed else (displayName ?: "Attachment")
-                    val fallback = seed.lines().first().trim().take(32).ifBlank { DEFAULT_TITLE }
+                    val fallback = if (trimmed.isNotEmpty()) trimmed.lines().first().trim().take(32).ifBlank { DEFAULT_TITLE } else tr("Attachment", "مرفق")
                     titleFallbacks[convoId] = fallback
                     conversationDao.updateTitle(convoId, fallback)
-                    engine.makeTitle(convoId, seed)
+                    if (trimmed.isNotEmpty()) engine.makeTitle(convoId, trimmed)
                 }
             } catch (e: Exception) {
                 _generating.update { it - convoId }; _errors.update { it + (convoId to ("Could not attach the file: " + (e.message ?: "unknown error"))) }; return@launch
@@ -339,6 +339,7 @@ class AiViewModel(application: Application) : AndroidViewModel(application), Tex
     private fun buildRequest(entities: List<ChatEntity>): BuiltRequest {
         val system = StringBuilder()
         system.append("You are Nexus, a helpful assistant. Reply in the same language as the user's last message. Use Markdown for formatting and fenced code blocks for code.")
+        system.append("\n\nWhat this app can and cannot do: you reply with text and Markdown only. You cannot generate, edit or open images, audio or video, create downloadable files, browse the internet, or run code. Never claim you can. If the user asks for something like that, say plainly that you cannot do it here and offer what you can do instead, for example a detailed image prompt or code the user can run themselves.")
         val custom = prefs.getString("custom_instruction", "")?.trim().orEmpty()
         if (custom.isNotEmpty()) system.append("\n\nThe user's standing instructions:\n").append(custom.take(1500))
         val mem = if (prefs.getBoolean("use_memory", true)) _memories.value.take(20) else emptyList()

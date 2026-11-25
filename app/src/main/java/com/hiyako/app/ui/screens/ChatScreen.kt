@@ -386,9 +386,9 @@ fun ChatScreen(onNavigateToSettings: () -> Unit = {}, vm: AiViewModel = viewMode
                         val showJump by remember { derivedStateOf { listState.canScrollForward } }
                         AnimatedVisibility(
                             visible = showJump, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut(),
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 12.dp)
                         ) {
-                            SmallFloatingActionButton(onClick = { scope.launch { listState.scrollToItem((totalItems - 1).coerceAtLeast(0)); listState.scrollBy(100000f); stickToBottom = true } }, containerColor = CardDark, contentColor = AccentBlue) {
+                            SmallFloatingActionButton(onClick = { scope.launch { listState.scrollToItem((totalItems - 1).coerceAtLeast(0)); listState.scrollBy(100000f); stickToBottom = true } }, containerColor = CardDark.copy(alpha = 0.92f), contentColor = AccentBlue) {
                                 Icon(Icons.Default.KeyboardArrowDown, tr("Scroll to bottom", "الانتقال للأسفل"))
                             }
                         }

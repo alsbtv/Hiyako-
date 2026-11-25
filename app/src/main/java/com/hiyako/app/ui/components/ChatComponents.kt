@@ -225,7 +225,7 @@ private sealed class MdBlock {
     class Para(val text: String) : MdBlock()
     class Head(val level: Int, val text: String) : MdBlock()
     class Bullets(val items: List<String>) : MdBlock()
-    class Numbers(val items: List<String>) : MdBlock()
+    class Numbers(val items: List<String>, val start: Int = 1) : MdBlock()
     class Code(val lang: String, val code: String) : MdBlock()
     class Quote(val text: String) : MdBlock()
 }
@@ -238,12 +238,13 @@ private fun parseMarkdownBlocks(src: String): List<MdBlock> {
     val para = ArrayList<String>()
     val bullets = ArrayList<String>()
     val numbers = ArrayList<String>()
+    var numbersStart = 1
     val quote = ArrayList<String>()
 
     fun flush() {
         if (para.isNotEmpty()) { out.add(MdBlock.Para(para.joinToString("\n"))); para.clear() }
         if (bullets.isNotEmpty()) { out.add(MdBlock.Bullets(bullets.toList())); bullets.clear() }
-        if (numbers.isNotEmpty()) { out.add(MdBlock.Numbers(numbers.toList())); numbers.clear() }
+        if (numbers.isNotEmpty()) { out.add(MdBlock.Numbers(numbers.toList(), numbersStart)); numbers.clear() }
         if (quote.isNotEmpty()) { out.add(MdBlock.Quote(quote.joinToString("\n"))); quote.clear() }
     }
 
@@ -271,7 +272,7 @@ private fun parseMarkdownBlocks(src: String): List<MdBlock> {
                 bullets.add(trimmed.substring(2).trim())
             }
             numberedRegex.containsMatchIn(trimmed) -> {
-                if (numbers.isEmpty()) flush()
+                if (numbers.isEmpty()) { flush(); numbersStart = trimmed.takeWhile { it.isDigit() }.toIntOrNull() ?: 1 }
                 numbers.add(trimmed.replace(numberedRegex, "").trim())
             }
             trimmed.startsWith("> ") -> {
@@ -329,7 +330,7 @@ fun MarkdownText(text: String) {
                 is MdBlock.Numbers -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     block.items.forEachIndexed { index, item ->
                         Row {
-                            Text("${index + 1}.  ", color = AccentBlue, fontSize = 16.sp, lineHeight = 26.sp)
+                            Text("${block.start + index}.  ", color = AccentBlue, fontSize = 16.sp, lineHeight = 26.sp)
                             Text(inlineStyled(item), color = TextPrimary, fontSize = 16.sp, lineHeight = 26.sp, modifier = Modifier.weight(1f), style = LocalTextStyle.current.copy(textDirection = TextDirection.Content))
                         }
                     }

@@ -31,10 +31,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -102,14 +105,31 @@ fun SettingsScreen(
                 ModelCache.save(context, account.id, ids)
                 status = tr("${ids.size} models loaded for ${account.label}.", "تم تحميل ${ids.size} نموذجاً لـ ${account.label}.")
             }.onFailure { e ->
-                status = tr(
-                    "Could not load models for ${account.label}: ${e.message ?: "unknown error"}",
-                    "تعذّر تحميل نماذج ${account.label}: ${e.message ?: "خطأ غير معروف"}"
-                )
+                val fallback = ProviderCatalog.find(account.providerId)?.fallbackModels.orEmpty()
+                if (fallback.isNotEmpty()) {
+                    ModelCache.save(context, account.id, fallback)
+                    status = tr(
+                        "${account.label} has no model list endpoint, so the built-in list was used.",
+                        "${account.label} لا يوفّر قائمة نماذج، فاستُخدمت القائمة المدمجة."
+                    )
+                } else {
+                    status = tr(
+                        "Could not load models for ${account.label}: ${e.message ?: "unknown error"}",
+                        "تعذّر تحميل نماذج ${account.label}: ${e.message ?: "خطأ غير معروف"}"
+                    )
+                }
             }
             accounts = AccountStore.load(context)
             vm.reloadAccountModels()
         }
+    }
+
+    suspend fun checkKey(spec: ProviderSpec, url: String, key: String): String? {
+        if (spec.fallbackModels.isNotEmpty()) return null
+        val message = OpenAiCompatClient.listModels(url, key).exceptionOrNull()?.message.orEmpty()
+        return if (message.contains("HTTP 401") || message.contains("HTTP 403")) {
+            tr("The provider rejected this key. Check it and try again.", "المزوّد رفض هذا المفتاح. تحقق منه وحاول مرة أخرى.")
+        } else null
     }
 
     fun signOut() {
@@ -152,12 +172,12 @@ fun SettingsScreen(
                         }
                         SettingsGroup(tr("App", "التطبيق")) {
                             SettingsRow(Icons.Outlined.Translate, tr("Language", "اللغة"), if (Lang.arabic) "العربية" else "English", onClick = { page = Page.Language })
-                            SettingsRow(Icons.Outlined.Palette, tr("Appearance", "المظهر"), ThemeState.palette.name, onClick = { page = Page.Appearance })
+                            SettingsRow(Icons.Outlined.Palette, tr("Appearance", "المظهر"), ThemeState.palette.displayName, onClick = { page = Page.Appearance })
                             SettingsRow(Icons.Outlined.TextFields, tr("Font size", "حجم الخط"), "${(vm.fontSize * 100).roundToInt()}%", onClick = { page = Page.FontSize })
                             SettingsRow(Icons.Outlined.Tune, tr("Personalization", "التخصيص"), toneLabel(sp.getString("tone", "Balanced") ?: "Balanced"), showDivider = false, onClick = { page = Page.Personalization })
                         }
                         SettingsGroup(tr("AI", "الذكاء الاصطناعي")) {
-                            SettingsRow(Icons.Outlined.Dns, tr("Providers and models", "المزودون والنماذج"), tr("${accounts.size} saved accounts", "${accounts.size} حسابات محفوظة"), onClick = { page = Page.Providers })
+                            SettingsRow(Icons.Outlined.Dns, tr("Providers and models", "المزودون والنماذج"), accountsLabel(accounts.size), onClick = { page = Page.Providers })
                             SettingsRow(Icons.Outlined.Memory, tr("Memory", "الذاكرة"), onClick = onNavigateToMemory)
                             SettingsRow(Icons.Outlined.Folder, tr("Workspace (GitHub)", "مساحة العمل (GitHub)"), showDivider = false, onClick = onNavigateToWorkspace)
                         }
@@ -215,7 +235,7 @@ fun SettingsScreen(
                         SettingsGroup(tr("Add a provider", "إضافة مزوّد")) {
                             addableProviders.forEachIndexed { i, spec ->
                                 SettingsRow(
-                                    icon = Icons.Outlined.Dns, title = spec.name, subtitle = spec.note.takeIf { it.isNotBlank() },
+                                    icon = Icons.Outlined.Dns, title = spec.name, subtitle = tr(spec.note, spec.noteAr.ifBlank { spec.note }).takeIf { it.isNotBlank() },
                                     showDivider = i < addableProviders.lastIndex, onClick = { addingFor = spec },
                                     trailing = { Icon(Icons.Default.Add, null, tint = AccentBlue) }
                                 )
@@ -310,7 +330,7 @@ fun SettingsScreen(
     )
 
     addingFor?.let { spec ->
-        AddAccountDialog(spec = spec, onDismiss = { addingFor = null }, onSave = { label, url, model, key ->
+        AddAccountDialog(spec = spec, onDismiss = { addingFor = null }, onValidate = { url, key -> checkKey(spec, url, key) }, onSave = { label, url, model, key ->
             val account = AccountStore.add(context, spec.id, label, url, model, key)
             accounts = AccountStore.load(context)
             addingFor = null
@@ -348,6 +368,16 @@ fun SettingsScreen(
         )
     }
 }
+
+private fun accountsLabel(n: Int): String = if (Lang.arabic) {
+    when {
+        n == 0 -> "لا توجد حسابات"
+        n == 1 -> "حساب واحد"
+        n == 2 -> "حسابان"
+        n in 3..10 -> "$n حسابات"
+        else -> "$n حساباً"
+    }
+} else if (n == 1) "1 saved account" else "$n saved accounts"
 
 private fun toneLabel(tone: String): String = when (tone) {
     "Precise" -> tr("Precise", "دقيق")
@@ -429,27 +459,36 @@ private fun SectionCard(title: String, description: String? = null, content: @Co
 @Composable
 private fun AppearancePage() {
     val context = LocalContext.current
-    AppPalettes.all.chunked(2).forEach { rowItems ->
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            rowItems.forEach { p ->
-                val selected = ThemeState.palette.id == p.id
-                Column(Modifier.weight(1f)) {
-                    Column(
-                        Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(16.dp)).background(p.base)
-                            .border(if (selected) 2.dp else 1.dp, if (selected) p.accent else p.border, RoundedCornerShape(16.dp))
-                            .clickable { ThemeState.select(context, p.id) }.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(Modifier.align(Alignment.End).size(56.dp, 14.dp).background(p.userBubble, RoundedCornerShape(7.dp)))
-                        Box(Modifier.size(70.dp, 9.dp).background(p.textSecondary.copy(alpha = 0.5f), RoundedCornerShape(5.dp)))
-                        Spacer(Modifier.weight(1f))
-                        Box(Modifier.size(16.dp).background(p.accent, CircleShape))
+    val groups = listOf(
+        tr("Dark", "داكنة") to AppPalettes.all.filter { it.dark },
+        tr("Light", "فاتحة") to AppPalettes.all.filter { !it.dark }
+    )
+    groups.forEach { (heading, list) ->
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text(heading, color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(start = 10.dp))
+            list.chunked(2).forEach { rowItems ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    rowItems.forEach { p ->
+                        val selected = ThemeState.palette.id == p.id
+                        Column(Modifier.weight(1f)) {
+                            Column(
+                                Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(16.dp)).background(p.base)
+                                    .border(if (selected) 2.dp else 1.dp, if (selected) p.accent else p.border, RoundedCornerShape(16.dp))
+                                    .clickable { ThemeState.select(context, p.id) }.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(Modifier.align(Alignment.End).size(56.dp, 14.dp).background(p.userBubble, RoundedCornerShape(7.dp)))
+                                Box(Modifier.size(70.dp, 9.dp).background(p.textSecondary.copy(alpha = 0.5f), RoundedCornerShape(5.dp)))
+                                Spacer(Modifier.weight(1f))
+                                Box(Modifier.size(16.dp).background(p.accent, CircleShape))
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(p.displayName, color = TextPrimary, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+                        }
                     }
-                    Spacer(Modifier.height(6.dp))
-                    Text(p.name, color = TextPrimary, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+                    if (rowItems.size < 2) Spacer(Modifier.weight(1f))
                 }
             }
-            if (rowItems.size < 2) Spacer(Modifier.weight(1f))
         }
     }
 }
@@ -674,38 +713,107 @@ private fun DefaultModelDialog(account: Account, models: List<String>, onPick: (
 }
 
 @Composable
-private fun AddAccountDialog(spec: ProviderSpec, onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
+private fun KeyLink(spec: ProviderSpec) {
+    val context = LocalContext.current
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AccentBlue.copy(alpha = 0.14f))
+            .border(1.dp, AccentBlue.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .clickable { openUrl(context, spec.keyUrl) }.padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Outlined.OpenInNew, null, tint = AccentBlue, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                tr("Don't have a key?", "ما عندك مفتاح؟"),
+                color = AccentBlue, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, textDecoration = TextDecoration.Underline
+            )
+            Text(
+                tr("Get one from ${spec.name} (opens your browser)", "احصل عليه من ${spec.name} (يفتح المتصفح)"),
+                color = TextSecondary, fontSize = 12.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun AddAccountDialog(
+    spec: ProviderSpec,
+    onDismiss: () -> Unit,
+    onValidate: suspend (String, String) -> String?,
+    onSave: (String, String, String, String) -> Unit
+) {
+    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
     var label by remember { mutableStateOf(spec.name) }
     var baseUrl by remember { mutableStateOf(spec.baseUrl) }
+    var accountId by remember { mutableStateOf("") }
     var model by remember { mutableStateOf(spec.defaultModel) }
     var apiKey by remember { mutableStateOf("") }
+    var showKey by remember { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!checking) onDismiss() },
         containerColor = CardDark,
         title = { Text(tr("Add ${spec.name}", "إضافة ${spec.name}"), color = TextPrimary) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = label, onValueChange = { label = it }, label = { Text(tr("Account name", "اسم الحساب")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (spec.needsKey) {
-                    OutlinedTextField(value = apiKey, onValueChange = { apiKey = it }, label = { Text(tr("API key", "مفتاح API")) }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = apiKey, onValueChange = { apiKey = it.trim() },
+                        label = { Text(tr("API key", "مفتاح API")) }, singleLine = true,
+                        visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            Row {
+                                IconButton(onClick = { showKey = !showKey }, modifier = Modifier.size(40.dp)) {
+                                    Icon(if (showKey) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, tr("Show or hide key", "إظهار أو إخفاء المفتاح"), modifier = Modifier.size(20.dp))
+                                }
+                                IconButton(onClick = { clipboard.getText()?.text?.let { apiKey = it.trim() } }, modifier = Modifier.size(40.dp)) {
+                                    Icon(Icons.Outlined.ContentPaste, tr("Paste", "لصق"), modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (spec.keyUrl.isNotBlank()) KeyLink(spec)
                 }
-                OutlinedTextField(value = baseUrl, onValueChange = { baseUrl = it }, label = { Text(tr("Base URL (https://)", "رابط الأساس (https://)")) }, singleLine = true, enabled = spec.editableBaseUrl, modifier = Modifier.fillMaxWidth())
+                if (spec.needsAccountId) {
+                    OutlinedTextField(value = accountId, onValueChange = { accountId = it.trim() }, label = { Text(tr("Account ID", "معرّف الحساب (Account ID)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+                if (spec.editableBaseUrl && !spec.needsAccountId) {
+                    OutlinedTextField(value = baseUrl, onValueChange = { baseUrl = it }, label = { Text(tr("Base URL (https://)", "رابط الأساس (https://)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
                 OutlinedTextField(value = model, onValueChange = { model = it }, label = { Text(tr("Default model (optional)", "النموذج الافتراضي (اختياري)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 error?.let { Text(it, color = DangerColor, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val url = baseUrl.trim()
+            TextButton(enabled = !checking, onClick = {
+                val url = if (spec.needsAccountId) spec.baseUrl.replace("{account_id}", accountId.trim()) else baseUrl.trim()
                 when {
                     spec.needsKey && apiKey.isBlank() -> error = tr("Enter an API key.", "أدخل مفتاح API.")
+                    spec.needsAccountId && !Regex("^[0-9a-fA-F]{32}$").matches(accountId.trim()) ->
+                        error = tr("Account ID must be 32 letters and digits.", "معرّف الحساب يتكون من 32 حرفاً وأرقاماً.")
                     !url.startsWith("https://") -> error = tr("Base URL must start with https://", "يجب أن يبدأ رابط الأساس بـ https://")
-                    else -> onSave(label.trim().ifEmpty { spec.name }, url, model.trim(), apiKey.trim())
+                    else -> {
+                        error = null
+                        checking = true
+                        scope.launch {
+                            val problem = onValidate(url, apiKey.trim())
+                            checking = false
+                            if (problem != null) error = problem
+                            else onSave(label.trim().ifEmpty { spec.name }, url, model.trim(), apiKey.trim())
+                        }
+                    }
                 }
-            }) { Text(tr("Save", "حفظ"), color = AccentBlue) }
+            }) {
+                if (checking) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = AccentBlue)
+                else Text(tr("Save", "حفظ"), color = AccentBlue)
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
+        dismissButton = { TextButton(enabled = !checking, onClick = onDismiss) { Text(tr("Cancel", "إلغاء"), color = TextSecondary) } }
     )
 }
